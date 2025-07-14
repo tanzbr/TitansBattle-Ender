@@ -44,11 +44,18 @@ public final class MessageUtils {
             return;
         }
         message = MessageFormat.format(message, args);
+
+        // Sync message to all gamemodes, except lobby and events
+        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "pbc msg all-gamemodes " + message);
+
         Bukkit.broadcastMessage(message);
     }
 
     public static void sendActionBar(@NotNull Player player, @NotNull String message) {
         try {
+            // Sync message to all gamemodes, except lobby and events
+            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "pbc actionbar all-gamemodes " + message);
+
             player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(message));
         } catch (NoSuchMethodError ex) {
             sendActionBar1_8(player, message);
