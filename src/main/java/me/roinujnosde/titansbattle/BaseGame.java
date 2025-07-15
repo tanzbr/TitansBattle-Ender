@@ -689,7 +689,11 @@ public abstract class BaseGame {
 
         @Override
         public void run() {
-            broadcastKey("preparation_over");
+            int clancount = getGroupParticipants().size();
+            int minclans = getConfig().getMinimumGroups();
+            int playerscount = getParticipants().size();
+            int minplayers = getConfig().getMinimumPlayers();
+            broadcastKey("preparation_over", clancount, minclans, playerscount, minplayers);
             runCommandsBeforeBattle(getCurrentFighters());
             battle = true;
             
