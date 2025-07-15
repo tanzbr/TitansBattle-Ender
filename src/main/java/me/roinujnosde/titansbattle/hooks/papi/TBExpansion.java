@@ -27,6 +27,8 @@ public class TBExpansion extends PlaceholderExpansion {
     private static final List<String> PLACEHOLDERS;
     private static final Pattern PARTICIPANTS_SIZE;
     private static final Pattern GROUPS_SIZE;
+    private static final Pattern IS_STARTING;
+    private static final Pattern GAME_NAME;
     private static final Pattern ARENA_IN_USE_PATTERN;
     private static final Pattern LAST_WINNER_GROUP_PATTERN;
     private static final Pattern LAST_WINNER_KILLER_PATTERN;
@@ -35,6 +37,8 @@ public class TBExpansion extends PlaceholderExpansion {
     static {
         PARTICIPANTS_SIZE = Pattern.compile("participants_size");
         GROUPS_SIZE = Pattern.compile("groups_size");
+        IS_STARTING = Pattern.compile("is_starting");
+        GAME_NAME = Pattern.compile("game_name");
         ARENA_IN_USE_PATTERN = Pattern.compile("arena_in_use_(?<arena>\\S+)");
         LAST_WINNER_GROUP_PATTERN = Pattern.compile("last_winner_group_(?<game>\\S+)");
         LAST_WINNER_KILLER_PATTERN = Pattern.compile("last_(?<type>winner|killer)_(?<game>\\S+)");
@@ -86,6 +90,37 @@ public class TBExpansion extends PlaceholderExpansion {
             Optional<Game> currentGame = plugin.getGameManager().getCurrentGame();
             return currentGame.map(game -> String.valueOf(game.getParticipants().size()))
                     .orElse("0");
+        }
+
+        Matcher isStartingMatcher = IS_STARTING.matcher(params);
+        if (isStartingMatcher.matches()) {
+            Optional<Game> currentGame = plugin.getGameManager().getCurrentGame();
+            return currentGame.map(game -> game.isLobby() ? "true" : "false").orElse("false");
+        }
+
+        Matcher gameNameMatcher = GAME_NAME.matcher(params);
+        if (gameNameMatcher.matches()) {
+            Optional<Game> currentGame = plugin.getGameManager().getCurrentGame();
+            String gameName = currentGame.map(game -> game.getConfig().getName()).orElse(null);
+            if (gameName == null) {
+                return "Nenhum";
+            }
+            switch (gameName) {
+                case "MiniGlad-Nethpot":
+                    return "&c&lMINIGLAD ➜ &eNethpot";
+                case "MiniGlad-Maces":
+                    return "&c&lMINIGLAD ➜ &eMaces";
+                case "MiniGlad-Projetil":
+                    return "&c&lMINIGLAD ➜ &eProjetil";
+                case "MiniGlad-SMP":
+                    return "&c&lMINIGLAD ➜ &eSMP";
+                case "MiniGlad-Dima":
+                    return "&c&lMINIGLAD ➜ &eDima";
+                case "Gladiador":
+                    return "&4&lGLADIADOR";
+                default:
+                    return "Nenhum";
+            }
         }
 
         Matcher groupsSizeMatcher = GROUPS_SIZE.matcher(params);

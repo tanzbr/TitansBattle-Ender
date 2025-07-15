@@ -79,10 +79,26 @@ public abstract class BaseGame {
         lobby = true;
         Integer interval = getConfig().getAnnouncementStartingInterval();
         lobbyTask = new LobbyAnnouncementTask(getConfig().getAnnouncementStartingTimes(), interval);
+
+        // Control holograms for npcs
+        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh on glad_iniciando");
+        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh on iniciangoagora");
+        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh off eventoagora");
+        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh off eventonenhum");
+
         addTask(lobbyTask.runTaskTimer(plugin, 0, interval * 20));
     }
 
     public void finish(boolean cancelled) {
+        // Control holograms for npcs   
+        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh off glad_iniciando");
+        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh off iniciangoagora");
+        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh on eventonenhum");
+
+        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh off glad_camarote");
+        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "npc sel 438");
+        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "npc despawn");
+
         teleportAll(getConfig().getExit());
         killTasks();
         runCommandsAfterBattle(getParticipants());
@@ -458,8 +474,11 @@ public abstract class BaseGame {
             processRemainingPlayers(warrior);
             //last participant
             if (getConfig().isGroupMode() && group != null && !getGroupParticipants().containsKey(group)) {
-                broadcastKey("group_defeated", group.getName());
-                Bukkit.getPluginManager().callEvent(new GroupDefeatedEvent(group, warrior.toOnlinePlayer()));
+                // Only broadcast if more than one group remains after this group is eliminated
+                if (getGroupParticipants().size() > 1) {
+                    broadcastKey("group_defeated", group.getName());
+                    Bukkit.getPluginManager().callEvent(new GroupDefeatedEvent(group, warrior.toOnlinePlayer()));
+                }
                 group.getData().increaseDefeats(getConfig().getName());
             }
             sendRemainingOpponentsCount();
@@ -608,6 +627,15 @@ public abstract class BaseGame {
     }
 
     protected void startPreparation() {
+        // Control holograms for npcs
+        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh off glad_iniciando");
+        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh off iniciangoagora");
+        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh on eventonenhum");
+
+        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh on glad_camarote");
+        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "npc sel 438");
+        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "npc spawn");
+
         addTask(new PreparationTimeTask().runTaskLater(plugin, getConfig().getPreparationTime() * 20));
         addTask(new CountdownTitleTask(getCurrentFighters(), getConfig().getPreparationTime()).runTaskTimer(plugin, 0L, 20L));
     }
