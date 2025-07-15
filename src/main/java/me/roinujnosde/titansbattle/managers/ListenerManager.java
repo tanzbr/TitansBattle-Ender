@@ -27,7 +27,8 @@ public class ListenerManager {
         registerListener(new PlayerCommandPreprocessListener(plugin));
         registerListener(new PlayerDeathListener(plugin));
         registerListener(new EntityDamageListener(plugin));
-        registerListener(new PlayerTeleportListener(plugin));
+        // Disable teleport listener for now
+        // registerListener(new PlayerTeleportListener(plugin));
         registerListener(new BlockUpdateListener(plugin));
         registerListener(new JoinGameListener(plugin));
         plugin.getLogger().info("Registering battle listeners...");

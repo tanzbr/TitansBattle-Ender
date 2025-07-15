@@ -308,6 +308,10 @@ public abstract class BaseGame {
         }
         message = MessageFormat.format(message, args);
         if (message.startsWith("!!broadcast")) {
+
+            // Sync message to all gamemodes, except lobby and events
+            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "pbc msg all-gamemodes " + message.replace("!!broadcast", ""));
+
             Bukkit.broadcastMessage(message.replace("!!broadcast", ""));
         } else {
             for (Warrior warrior : getParticipants()) {

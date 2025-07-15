@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static me.roinujnosde.titansbattle.BaseGameConfiguration.Prize.FIRST;
@@ -27,6 +28,7 @@ public class FreeForAllGame extends Game {
     private @Nullable Group winnerGroup;
     private @Nullable Warrior killer;
     private @NotNull List<Warrior> winners = new ArrayList<>();
+    private long startTime;
 
     public FreeForAllGame(TitansBattle plugin, GameConfiguration config) {
         super(plugin, config);
@@ -63,7 +65,11 @@ public class FreeForAllGame extends Game {
     @Override
     protected void onLobbyEnd() {
         super.onLobbyEnd();
-        broadcastKey("game_started", getConfig().getPreparationTime());
+        this.startTime = System.currentTimeMillis();
+        String clans = getParticipantClans();
+        int clanCount = getParticipantClanCount();
+        int playerCount = getParticipants().size();
+        broadcastKey("game_started", getConfig().getPreparationTime(), clans, clanCount, playerCount);
         teleportToArena(getParticipants());
         startPreparation();
     }
@@ -92,7 +98,10 @@ public class FreeForAllGame extends Game {
         }
         today.setWinners(gameName, Helper.warriorListToUuidList(winners));
         String winnerName = getConfig().isGroupMode() ? winnerGroup.getName() : winners.get(0).getName();
-        broadcastKey("who_won", winnerName);
+        int totalKills = getWinnerGroupTotalKills();
+        int totalPlayers = getWinnerGroupTotalPlayers();
+        long duration = getEventDurationMinutes();
+        broadcastKey("who_won", winnerName, totalKills, totalPlayers, duration);
         discordAnnounce("discord_who_won", winnerName);
         winners.forEach(w -> w.increaseVictories(gameName));
         givePrizes(FIRST, winnerGroup, winners);
@@ -122,6 +131,49 @@ public class FreeForAllGame extends Game {
             groupsText = groupManager.buildStringFrom(getGroupParticipants().keySet());
         }
         return MessageFormat.format(getLang("game_info"),
-                getParticipants().size(), getGroupParticipants().size(), groupsText);
+                getParticipants().size(), getGroupParticipants().size(), groupsText, getEventDurationMinutes());
+    }
+
+    private int getWinnerGroupTotalKills() {
+        if (winnerGroup == null) {
+            return 0;
+        }
+        return killsCount.entrySet().stream()
+                .filter(entry -> winnerGroup.isMember(entry.getKey().getUniqueId()))
+                .mapToInt(Map.Entry::getValue)
+                .sum();
+    }
+
+    private int getWinnerGroupTotalPlayers() {
+        if (winnerGroup == null) {
+            return 0;
+        }
+        // Count participants who are members of the winnerGroup
+        return (int) getParticipants().stream().filter(p -> winnerGroup.isMember(p.getUniqueId())).count();
+    }
+
+    private long getEventDurationMinutes() {
+        if (startTime == 0) {
+            return 0;
+        }
+        return (System.currentTimeMillis() - startTime) / 60000;
+    }
+
+    private String getParticipantClans() {
+        return getParticipants().stream()
+                .map(this::getGroup)
+                .filter(g -> g != null)
+                .map(Group::getName)
+                .distinct()
+                .collect(Collectors.joining(", "));
+    }
+
+    private int getParticipantClanCount() {
+        return (int) getParticipants().stream()
+                .map(this::getGroup)
+                .filter(g -> g != null)
+                .map(Group::getName)
+                .distinct()
+                .count();
     }
 }
