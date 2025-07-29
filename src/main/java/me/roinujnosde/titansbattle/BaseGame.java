@@ -7,6 +7,7 @@ import me.roinujnosde.titansbattle.hooks.papi.PlaceholderHook;
 import me.roinujnosde.titansbattle.managers.CommandManager;
 import me.roinujnosde.titansbattle.managers.GameManager;
 import me.roinujnosde.titansbattle.managers.GroupManager;
+import me.roinujnosde.titansbattle.types.GameConfiguration;
 import me.roinujnosde.titansbattle.types.Group;
 import me.roinujnosde.titansbattle.types.Kit;
 import me.roinujnosde.titansbattle.types.Warrior;
@@ -143,7 +144,12 @@ public abstract class BaseGame {
         healAndClearEffects(warrior);
         broadcastKey("player_joined", warrior.getName());
         player.sendMessage(getLang("objective"));
-        
+
+        // Set player in survival mode and clear inventory
+        player.setGameMode(GameMode.SURVIVAL);
+        player.setAllowFlight(false);
+        player.setFlying(false);
+
         if (participants.size() == getConfig().getMaximumPlayers() && lobbyTask != null) {
             lobbyTask.processEnd();
         }
@@ -164,6 +170,19 @@ public abstract class BaseGame {
             if (killer != null) {
                 killer.increaseKills(gameName);
                 increaseKills(killer);
+                // Award league points to killer's clan if configured
+                if (getConfig() instanceof GameConfiguration) {
+                    GameConfiguration config = (GameConfiguration) getConfig();
+                    int points = config.getLeaguePointsKill();
+                    if (points > 0) {
+                        Group killerGroup = getGroup(killer);
+                        if (killerGroup != null) {
+                            killer.sendMessage("&aSeu clan recebeu &f" + points + " pontos &apela sua kill!");
+                            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
+                                String.format("clanleague addevent %s %d %s", killerGroup.getName(), points, gameName));
+                        }
+                    }
+                }
             }
             victim.increaseDeaths(gameName);
             playDeathSound(victim);
@@ -586,23 +605,35 @@ public abstract class BaseGame {
 
     protected void teleportToArena(List<Warrior> warriors) {
         List<Location> arenaEntrances = new ArrayList<>(getConfig().getArenaEntrances().values());
+        if (arenaEntrances.isEmpty()) {
+            return;
+        }
         if (arenaEntrances.size() == 1) {
             teleport(warriors, arenaEntrances.get(0));
             return;
         }
 
+        Random random = new Random();
+
         if (config.isGroupMode()) {
-            List<Group> groups = warriors.stream().map(this::getGroup).distinct().collect(Collectors.toList());
+            // Map each group to its warriors from the provided list
+            Map<Group, List<Warrior>> groupToWarriors = new LinkedHashMap<>();
+            for (Warrior warrior : warriors) {
+                Group group = getGroup(warrior);
+                if (group == null) continue;
+                groupToWarriors.computeIfAbsent(group, k -> new ArrayList<>()).add(warrior);
+            }
 
-            for (int i = 0; i < groups.size(); i++) {
-                Set<Warrior> groupWarriors = Objects.requireNonNull(plugin.getGroupManager()).getWarriors(groups.get(i));
-                groupWarriors.retainAll(warriors);
-
-                teleport(groupWarriors, arenaEntrances.get(i % arenaEntrances.size()));
+            for (List<Warrior> groupWarriors : groupToWarriors.values()) {
+                if (!groupWarriors.isEmpty()) {
+                    Location entrance = arenaEntrances.get(random.nextInt(arenaEntrances.size()));
+                    teleport(groupWarriors, entrance);
+                }
             }
         } else {
-            for (int i = 0; i < warriors.size(); i++) {
-                teleport(warriors.get(i), arenaEntrances.get(i % arenaEntrances.size()));
+            for (Warrior warrior : warriors) {
+                Location entrance = arenaEntrances.get(random.nextInt(arenaEntrances.size()));
+                teleport(warrior, entrance);
             }
         }
     }
@@ -653,7 +684,15 @@ public abstract class BaseGame {
         public void run() {
             long seconds = times * interval;
             if (times > 0) {
-                broadcastKey("starting_game", seconds, getConfig().getMinimumGroups(), getConfig().getMinimumPlayers(), getGroupParticipants().size(), getParticipants().size());
+                int lp1 = 0, lp2 = 0, lp3 = 0;
+                if (getConfig() instanceof me.roinujnosde.titansbattle.types.GameConfiguration) {
+                    me.roinujnosde.titansbattle.types.GameConfiguration gc = (me.roinujnosde.titansbattle.types.GameConfiguration) getConfig();
+                    lp1 = gc.getLeaguePointsFirst();
+                    lp2 = gc.getLeaguePointsSecond();
+                    lp3 = gc.getLeaguePointsThird();
+                }
+                broadcastKey("starting_game", seconds, getConfig().getMinimumGroups(), getConfig().getMinimumPlayers(), getGroupParticipants().size(), getParticipants().size(),
+                    lp1, lp2, lp3);
                 times--;
             } else {
                 processEnd();

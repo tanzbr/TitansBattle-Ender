@@ -4,7 +4,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 public class Duel<T> {
     private final List<T> duelists = new ArrayList<>();

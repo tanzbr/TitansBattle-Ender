@@ -20,15 +20,34 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static me.roinujnosde.titansbattle.BaseGameConfiguration.Prize.FIRST;
+import static me.roinujnosde.titansbattle.BaseGameConfiguration.Prize.SECOND;
+import static me.roinujnosde.titansbattle.BaseGameConfiguration.Prize.THIRD;
 import static me.roinujnosde.titansbattle.BaseGameConfiguration.Prize.KILLER;
 import static me.roinujnosde.titansbattle.utils.SoundUtils.Type.VICTORY;
 
 public class FreeForAllGame extends Game {
 
     private @Nullable Group winnerGroup;
+    private @Nullable Group secondPlaceGroup;
+    private @Nullable Group thirdPlaceGroup;
     private @Nullable Warrior killer;
     private @NotNull List<Warrior> winners = new ArrayList<>();
+    private @Nullable List<Warrior> secondPlaceWinners;
+    private @Nullable List<Warrior> thirdPlaceWinners;
+    private final List<EliminationRecord> eliminationOrder = new ArrayList<>();
     private long startTime;
+
+    private static class EliminationRecord {
+        final Group group;
+        final List<Warrior> members;
+        final long timestamp;
+
+        EliminationRecord(Group group, List<Warrior> members) {
+            this.group = group;
+            this.members = new ArrayList<>(members);
+            this.timestamp = System.currentTimeMillis();
+        }
+    }
 
     public FreeForAllGame(TitansBattle plugin, GameConfiguration config) {
         super(plugin, config);
@@ -46,8 +65,12 @@ public class FreeForAllGame extends Game {
 
     @Override
     protected void processRemainingPlayers(@NotNull Warrior warrior) {
+        // Track elimination BEFORE checking remaining players
+        trackEliminationIfNecessary(warrior);
+        
         if (getConfig().isGroupMode()) {
             if (getGroupParticipants().size() == 1) {
+                determinePodiumFromEliminations();
                 killer = findKiller();
                 getGroupParticipants().keySet().stream().findAny().ifPresent(g -> {
                     winnerGroup = g;
@@ -56,9 +79,35 @@ public class FreeForAllGame extends Game {
                 finish(false);
             }
         } else if (participants.size() == 1) {
+            determinePodiumFromEliminations();
             killer = findKiller();
             winners = getParticipants();
             finish(false);
+        }
+    }
+    
+    private void trackEliminationIfNecessary(@NotNull Warrior warrior) {
+        if (getConfig().isGroupMode()) {
+            Group group = getGroup(warrior);
+            // Check if this group will be eliminated after this warrior dies
+            if (group != null) {
+                // Count remaining alive members in this group after this warrior is removed
+                long remainingMembers = getParticipants().stream()
+                        .filter(p -> group.isMember(p.getUniqueId()) && !p.equals(warrior))
+                        .count();
+                
+                // If no members left, this group is being eliminated
+                if (remainingMembers == 0) {
+                    List<Warrior> allGroupMembers = getCasualties().stream()
+                            .filter(p -> group.isMember(p.getUniqueId()))
+                            .collect(Collectors.toList());
+                    allGroupMembers.add(warrior); // Include the current dying warrior
+                    eliminationOrder.add(new EliminationRecord(group, allGroupMembers));
+                }
+            }
+        } else {
+            // In individual mode, each warrior elimination is tracked individually
+            eliminationOrder.add(new EliminationRecord(null, Collections.singletonList(warrior)));
         }
     }
 
@@ -74,12 +123,34 @@ public class FreeForAllGame extends Game {
         startPreparation();
     }
 
+    private void determinePodiumFromEliminations() {
+        // Second place: last eliminated team (lost in finals)
+        if (eliminationOrder.size() >= 1) {
+            EliminationRecord secondPlace = eliminationOrder.get(eliminationOrder.size() - 1);
+            secondPlaceGroup = secondPlace.group;
+            secondPlaceWinners = new ArrayList<>(secondPlace.members);
+        }
+        
+        // Third place: second-to-last eliminated team (lost in semifinals)
+        if (eliminationOrder.size() >= 2) {
+            EliminationRecord thirdPlace = eliminationOrder.get(eliminationOrder.size() - 2);
+            thirdPlaceGroup = thirdPlace.group;
+            thirdPlaceWinners = new ArrayList<>(thirdPlace.members);
+        }
+    }
+
     @Override
     protected void processWinners() {
         String gameName = getConfig().getName();
         Winners today = databaseManager.getTodaysWinners();
         if (getConfig().isUseKits()) {
             winners.forEach(Kit::clearInventory);
+            if (secondPlaceWinners != null) {
+                secondPlaceWinners.forEach(Kit::clearInventory);
+            }
+            if (thirdPlaceWinners != null) {
+                thirdPlaceWinners.forEach(Kit::clearInventory);
+            }
         }
         if (winnerGroup != null) {
             Bukkit.getPluginManager().callEvent(new GroupWinEvent(winnerGroup));
@@ -87,24 +158,99 @@ public class FreeForAllGame extends Game {
             today.setWinnerGroup(gameName, winnerGroup.getName());
             getCasualties().stream().filter(p -> winnerGroup.isMember(p.getUniqueId())).forEach(winners::add);
         }
-        SoundUtils.playSound(VICTORY, plugin.getConfig(), winners);
+        
+        SoundUtils.playSound(VICTORY, plugin.getConfig(), winners, secondPlaceWinners, thirdPlaceWinners);
         PlayerWinEvent event = new PlayerWinEvent(this, winners);
         Bukkit.getPluginManager().callEvent(event);
+        
         if (killer != null) {
             plugin.getGameManager().setKiller(getConfig(), killer, null);
             SoundUtils.playSound(VICTORY, plugin.getConfig(), killer.toOnlinePlayer());
             discordAnnounce("discord_who_won_killer", killer.getName(), killsCount.get(killer));
             givePrizes(KILLER, null, Collections.singletonList(killer));
+            today.setKiller(gameName, killer.getUniqueId());
         }
+        
         today.setWinners(gameName, Helper.warriorListToUuidList(winners));
-        String winnerName = getConfig().isGroupMode() ? winnerGroup.getName() : winners.get(0).getName();
-        int totalKills = getWinnerGroupTotalKills();
-        int totalPlayers = getWinnerGroupTotalPlayers();
+        if (secondPlaceWinners != null) {
+            today.setSecondPlaceWinners(gameName, Helper.warriorListToUuidList(secondPlaceWinners));
+            if (secondPlaceGroup != null) {
+                today.setSecondPlaceGroup(gameName, secondPlaceGroup.getName());
+            }
+        }
+        if (thirdPlaceWinners != null) {
+            today.setThirdPlaceWinners(gameName, Helper.warriorListToUuidList(thirdPlaceWinners));
+            if (thirdPlaceGroup != null) {
+                today.setThirdPlaceGroup(gameName, thirdPlaceGroup.getName());
+            }
+        }
+        
+        String winnerName = getWinnerName(winnerGroup, winners);
+        String secondPlaceName = getWinnerName(secondPlaceGroup, secondPlaceWinners);
+        String thirdPlaceName = getWinnerName(thirdPlaceGroup, thirdPlaceWinners);
         long duration = getEventDurationMinutes();
-        broadcastKey("who_won", winnerName, totalKills, totalPlayers, duration);
-        discordAnnounce("discord_who_won", winnerName);
+        
+        if (secondPlaceWinners != null || thirdPlaceWinners != null) {
+            int winnerPlayersCount = winners != null ? winners.size() : 0;
+            int winnerKillsCount = getWinnerGroupTotalKills();
+            int secondPlacePlayersCount = secondPlaceWinners != null ? secondPlaceWinners.size() : 0;
+            int secondPlaceKillsCount = getGroupKills(secondPlaceGroup, secondPlaceWinners);
+            int thirdPlacePlayersCount = thirdPlaceWinners != null ? thirdPlaceWinners.size() : 0;
+            int thirdPlaceKillsCount = getGroupKills(thirdPlaceGroup, thirdPlaceWinners);
+
+            int winnerPoints = getConfig().getLeaguePointsFirst();
+            int winnerKillsPoints = winnerKillsCount * getConfig().getLeaguePointsKill();
+            int secondPlacePoints = getConfig().getLeaguePointsSecond();
+            int secondPlaceKillsPoints = secondPlaceKillsCount * getConfig().getLeaguePointsKill();
+            int thirdPlacePoints = getConfig().getLeaguePointsThird();
+            int thirdPlaceKillsPoints = thirdPlaceKillsCount * getConfig().getLeaguePointsKill();
+
+            killer = findKiller();
+            int killerKillsCount = killer != null && killsCount.containsKey(killer) ? killsCount.get(killer) : 0;
+            broadcastKey("who_won_freeforall_podium",
+                winnerName, winnerPoints, winnerPlayersCount, winnerKillsCount, winnerKillsPoints,
+                secondPlaceName, secondPlacePoints, secondPlacePlayersCount, secondPlaceKillsCount, secondPlaceKillsPoints,
+                thirdPlaceName, thirdPlacePoints, thirdPlacePlayersCount, thirdPlaceKillsCount, thirdPlaceKillsPoints,
+                duration,
+                killer.getName(), killerKillsCount
+            );
+            discordAnnounce("discord_who_won_freeforall_podium",
+                winnerName, winnerPoints, winnerPlayersCount, winnerKillsCount, winnerKillsPoints,
+                secondPlaceName, secondPlacePoints, secondPlacePlayersCount, secondPlaceKillsCount, secondPlaceKillsPoints,
+                thirdPlaceName, thirdPlacePoints, thirdPlacePlayersCount, thirdPlaceKillsCount, thirdPlaceKillsPoints,
+                duration,
+                killer.getName(), killerKillsCount
+            );
+        } else {
+            int totalKills = getWinnerGroupTotalKills();
+            int totalPlayers = getWinnerGroupTotalPlayers();
+            broadcastKey("who_won", winnerName, totalKills, totalPlayers, duration);
+            discordAnnounce("discord_who_won", winnerName);
+        }
+        
         winners.forEach(w -> w.increaseVictories(gameName));
         givePrizes(FIRST, winnerGroup, winners);
+        givePrizes(SECOND, secondPlaceGroup, secondPlaceWinners);
+        givePrizes(THIRD, thirdPlaceGroup, thirdPlaceWinners);
+        // Schedule sync command after 5 seconds
+        Bukkit.getScheduler().runTaskLater(plugin, () ->
+            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "sync all uclan reload addons"), 100L);
+
+        // League points integration
+        GameConfiguration config = getConfig();
+        String eventName = config.getName();
+        if (winnerGroup != null && config.getLeaguePointsFirst() > 0) {
+            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
+                String.format("clanleague addevent %s %d %s", winnerGroup.getName(), config.getLeaguePointsFirst(), eventName));
+        }
+        if (secondPlaceGroup != null && config.getLeaguePointsSecond() > 0) {
+            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
+                String.format("clanleague addevent %s %d %s", secondPlaceGroup.getName(), config.getLeaguePointsSecond(), eventName));
+        }
+        if (thirdPlaceGroup != null && config.getLeaguePointsThird() > 0) {
+            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
+                String.format("clanleague addevent %s %d %s", thirdPlaceGroup.getName(), config.getLeaguePointsThird(), eventName));
+        }
     }
 
     @Override
@@ -112,11 +258,15 @@ public class FreeForAllGame extends Game {
         if (!isParticipant(warrior)) {
             return;
         }
+        determinePodiumFromEliminations();
         killer = findKiller();
         if (getConfig().isGroupMode()) {
             winnerGroup = getGroup(warrior);
-            //noinspection ConstantConditions
-            winners = getParticipants().stream().filter(p -> winnerGroup.isMember(p.getUniqueId())).collect(Collectors.toList());
+            if (winnerGroup != null) {
+                winners = getParticipants().stream().filter(p -> winnerGroup.isMember(p.getUniqueId())).collect(Collectors.toList());
+            } else {
+                winners.add(warrior);
+            }
         } else {
             winners.add(warrior);
         }
@@ -132,6 +282,19 @@ public class FreeForAllGame extends Game {
         }
         return MessageFormat.format(getLang("game_info"),
                 getParticipants().size(), getGroupParticipants().size(), groupsText, getEventDurationMinutes());
+    }
+
+    @NotNull
+    private String getWinnerName(@Nullable Group group, @Nullable List<Warrior> warriors) {
+        String name = getLang("no_winner_tournament");
+        if (getConfig().isGroupMode()) {
+            if (group != null) {
+                name = group.getName();
+            }
+        } else if (warriors != null && !warriors.isEmpty()) {
+            name = warriors.get(0).getName();
+        }
+        return name;
     }
 
     private int getWinnerGroupTotalKills() {
@@ -175,5 +338,15 @@ public class FreeForAllGame extends Game {
                 .map(Group::getName)
                 .distinct()
                 .count();
+    }
+
+    private int getGroupKills(@Nullable Group group, @Nullable List<Warrior> warriors) {
+        if (group == null || warriors == null) {
+            return 0;
+        }
+        return killsCount.entrySet().stream()
+                .filter(entry -> group.isMember(entry.getKey().getUniqueId()))
+                .mapToInt(Map.Entry::getValue)
+                .sum();
     }
 }

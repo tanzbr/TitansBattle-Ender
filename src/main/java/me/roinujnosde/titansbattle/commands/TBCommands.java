@@ -19,6 +19,15 @@ import me.roinujnosde.titansbattle.types.Warrior;
 import me.roinujnosde.titansbattle.types.Winners;
 import me.roinujnosde.titansbattle.utils.Helper;
 import me.roinujnosde.titansbattle.utils.SoundUtils;
+import me.roinujnosde.titansbattle.utils.MessageUtils;
+import org.bukkit.Bukkit;
+import org.bukkit.scheduler.BukkitRunnable;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -45,6 +54,10 @@ public class TBCommands extends BaseCommand {
     private DatabaseManager databaseManager;
     @Dependency
     private ConfigurationDao configDao;
+
+    // Spectator tracking
+    private static final Set<UUID> SPECTATORS = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private static final ConcurrentHashMap<UUID, Integer> SPECTATOR_TASKS = new ConcurrentHashMap<>();
 
     @Subcommand("%start|start")
     @CommandPermission("titansbattle.start")
@@ -120,11 +133,28 @@ public class TBCommands extends BaseCommand {
 
     @Subcommand("%exit|exit|leave")
     @CommandPermission("titansbattle.exit")
-    @Conditions("participant")
     @Description("{@@command.description.exit}")
     public void leave(Player sender) {
+        UUID uuid = sender.getUniqueId();
+        if (SPECTATORS.contains(uuid)) {
+            SPECTATORS.remove(uuid);
+            Integer taskId = SPECTATOR_TASKS.remove(uuid);
+            if (taskId != null) {
+                Bukkit.getScheduler().cancelTask(taskId);
+            }
+            // Teleport to spawn or general exit
+            Location exit = plugin.getConfigManager().getGeneralExit();
+            if (exit == null) {
+                exit = sender.getWorld().getSpawnLocation();
+            }
+            sender.teleport(exit);
+            sender.setGameMode(GameMode.SURVIVAL);
+            sender.setAllowFlight(false);
+            sender.setFlying(false);
+            sender.sendMessage("§aVocê saiu do modo espectador do evento.");
+            return;
+        }
         Warrior warrior = databaseManager.getWarrior(sender);
-        //noinspection ConstantConditions
         plugin.getBaseGameFrom(sender).onLeave(warrior);
     }
 
@@ -185,7 +215,42 @@ public class TBCommands extends BaseCommand {
 
         Location watchroom = config.getWatchroom();
         sender.teleport(watchroom);
+
+        // Make user in spectator mode and clear inventory
+        sender.setGameMode(GameMode.SPECTATOR);
+        sender.setAllowFlight(true);
+        sender.setFlying(true);
+        sender.getInventory().clear();
         SoundUtils.playSound(SoundUtils.Type.WATCH, plugin.getConfig(), sender);
+
+        // Add to spectators and start actionbar
+        UUID uuid = sender.getUniqueId();
+        SPECTATORS.add(uuid);
+        Integer oldTask = SPECTATOR_TASKS.remove(uuid);
+        if (oldTask != null) {
+            Bukkit.getScheduler().cancelTask(oldTask);
+        }
+        int taskId = new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (!SPECTATORS.contains(uuid) || !sender.isOnline() || sender.getGameMode() != GameMode.SPECTATOR) {
+                    this.cancel();
+                    SPECTATOR_TASKS.remove(uuid);
+                    return;
+                }
+                MessageUtils.sendActionBar(sender, "§cPara sair, use /gladiador sair");
+            }
+        }.runTaskTimer(plugin, 0L, 20L).getTaskId();
+        SPECTATOR_TASKS.put(uuid, taskId);
+
+        // Send list of current spectators
+        String list = SPECTATORS.stream()
+                .map(Bukkit::getPlayer)
+                .filter(p -> p != null && p.isOnline())
+                .map(Player::getName)
+                .reduce((a, b) -> a + ", " + b)
+                .orElse("(nenhum)");
+        sender.sendMessage("§eEspectadores atuais: " + list);
     }
 
 }

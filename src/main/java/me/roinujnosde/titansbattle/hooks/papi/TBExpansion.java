@@ -110,14 +110,16 @@ public class TBExpansion extends PlaceholderExpansion {
                     return "&c&lMINIGLAD ➜ &eNethpot";
                 case "MiniGlad-Maces":
                     return "&c&lMINIGLAD ➜ &eMaces";
-                case "MiniGlad-Projetil":
-                    return "&c&lMINIGLAD ➜ &eProjetil";
+                case "MiniGlad-Projeteis":
+                    return "&c&lMINIGLAD ➜ &eProjetéis";
                 case "MiniGlad-SMP":
                     return "&c&lMINIGLAD ➜ &eSMP";
                 case "MiniGlad-Dima":
                     return "&c&lMINIGLAD ➜ &eDima";
-                case "Gladiador":
-                    return "&4&lGLADIADOR";
+                case "Gladiador-Nethpot":
+                    return "&4&lGLADIADOR ➜ &eNethpot";
+                case "Gladiador-SMP":
+                    return "&4&lGLADIADOR ➜ &eSMP";
                 default:
                     return "Nenhum";
             }

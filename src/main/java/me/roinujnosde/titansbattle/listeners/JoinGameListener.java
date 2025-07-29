@@ -65,6 +65,13 @@ public class JoinGameListener extends TBListener {
             return;
         }
         int players = groups.getOrDefault(warrior.getGroup(), 0);
+        // Recompute group membership for the joining player
+        Group currentGroup = warrior.getGroup();
+        if (currentGroup != null) {
+            players = (int) game.getParticipants().stream()
+                .filter(w -> currentGroup.equals(w.getGroup()))
+                .count();
+        }
         if (players >= config.getMaximumPlayersPerGroup() && config.getMaximumPlayersPerGroup() > 0) {
             cancelWithMessage(event, "maximum-players-per-group");
         }

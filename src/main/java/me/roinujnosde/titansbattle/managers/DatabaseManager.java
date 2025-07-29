@@ -77,7 +77,7 @@ public class DatabaseManager {
     }
 
     private enum WinnerType {
-        KILLER, WINNER_GROUP, PLAYER_WINNER
+        KILLER, WINNER_GROUP, PLAYER_WINNER, SECOND_PLACE_WINNER, SECOND_PLACE_GROUP, THIRD_PLACE_WINNER, THIRD_PLACE_GROUP
     }
 
     public void setup() {
@@ -101,7 +101,33 @@ public class DatabaseManager {
                               + " killer varchar(255),"
                               + " player_winners text,"
                               + " winner_group varchar(255),"
+                              + " second_place_winners text,"
+                              + " second_place_group varchar(255),"
+                              + " third_place_winners text,"
+                              + " third_place_group varchar(255),"
                               + " game varchar(20) NOT NULL);");
+            
+            // Add columns to existing tb_winners table if they don't exist
+            try {
+                statement.execute("ALTER TABLE tb_winners ADD COLUMN second_place_winners text;");
+            } catch (SQLException ignored) {
+                // Column already exists
+            }
+            try {
+                statement.execute("ALTER TABLE tb_winners ADD COLUMN second_place_group varchar(255);");
+            } catch (SQLException ignored) {
+                // Column already exists
+            }
+            try {
+                statement.execute("ALTER TABLE tb_winners ADD COLUMN third_place_winners text;");
+            } catch (SQLException ignored) {
+                // Column already exists
+            }
+            try {
+                statement.execute("ALTER TABLE tb_winners ADD COLUMN third_place_group varchar(255);");
+            } catch (SQLException ignored) {
+                // Column already exists
+            }
         } catch (SQLException ex) {
             plugin.debug("Error while creating the tables: " + ex.getMessage(), false);
         }
@@ -147,7 +173,7 @@ public class DatabaseManager {
     private void update(Winners winners) {
         HashSet<GameConfiguration> updated = new HashSet<>();
 
-        String update = "UPDATE tb_winners SET killer=?, player_winners=?, winner_group=? WHERE date=? AND game=?;";
+        String update = "UPDATE tb_winners SET killer=?, player_winners=?, winner_group=?, second_place_winners=?, second_place_group=?, third_place_winners=?, third_place_group=? WHERE date=? AND game=?;";
         try (PreparedStatement statement = getConnection().prepareStatement(update)) {
             for (GameConfiguration game : getGames()) {
                 if (winners.isEmpty(game.getName())) {
@@ -164,7 +190,7 @@ public class DatabaseManager {
             plugin.debug("Error while saving the winners: " + ex.getMessage(), false);
         }
 
-        String insert = "INSERT INTO tb_winners (killer, player_winners, winner_group, date, game) VALUES (?, ?, ?, ?, ?);";
+        String insert = "INSERT INTO tb_winners (killer, player_winners, winner_group, second_place_winners, second_place_group, third_place_winners, third_place_group, date, game) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);";
         try (PreparedStatement statement = getConnection().prepareStatement(insert)) {
             for (GameConfiguration game : getGames()) {
                 if (!updated.contains(game) && !winners.isEmpty(game.getName())) {
@@ -186,6 +212,8 @@ public class DatabaseManager {
         if (winners.getKiller(name) != null) {
             killer = winners.getKiller(name).toString();
         }
+        
+        // First place winners
         String playerWinners;
         JsonArray ja = new JsonArray();
         if (winners.getPlayerWinners(name) != null) {
@@ -194,11 +222,33 @@ public class DatabaseManager {
         playerWinners = new Gson().toJson(ja);
         String winnerGroup = winners.getWinnerGroup(name);
 
+        // Second place winners
+        String secondPlaceWinners;
+        JsonArray ja2 = new JsonArray();
+        if (winners.getSecondPlaceWinners(name) != null) {
+            winners.getSecondPlaceWinners(name).stream().map(UUID::toString).forEach(ja2::add);
+        }
+        secondPlaceWinners = new Gson().toJson(ja2);
+        String secondPlaceGroup = winners.getSecondPlaceGroup(name);
+
+        // Third place winners
+        String thirdPlaceWinners;
+        JsonArray ja3 = new JsonArray();
+        if (winners.getThirdPlaceWinners(name) != null) {
+            winners.getThirdPlaceWinners(name).stream().map(UUID::toString).forEach(ja3::add);
+        }
+        thirdPlaceWinners = new Gson().toJson(ja3);
+        String thirdPlaceGroup = winners.getThirdPlaceGroup(name);
+
         statement.setString(1, killer);
         statement.setString(2, playerWinners);
         statement.setString(3, winnerGroup);
-        statement.setString(4, date);
-        statement.setString(5, name);
+        statement.setString(4, secondPlaceWinners);
+        statement.setString(5, secondPlaceGroup);
+        statement.setString(6, thirdPlaceWinners);
+        statement.setString(7, thirdPlaceGroup);
+        statement.setString(8, date);
+        statement.setString(9, name);
     }
 
     private void update(@NotNull String id, @NotNull GroupData data) {
@@ -434,6 +484,30 @@ public class DatabaseManager {
                             }
                             innerData.put(game, pw);
                             break;
+                        case SECOND_PLACE_WINNER:
+                            List<UUID> spw = new ArrayList<>();
+                            JsonArray ja2 = new Gson().fromJson(rs.getString("second_place_winners"), JsonArray.class);
+                            if (ja2 != null) {
+                                ja2.forEach(uuid -> spw.add(UUID.fromString(uuid.getAsString())));
+                            }
+                            innerData.put(game, spw);
+                            break;
+                        case SECOND_PLACE_GROUP:
+                            String spg = rs.getString("second_place_group");
+                            innerData.put(game, spg);
+                            break;
+                        case THIRD_PLACE_WINNER:
+                            List<UUID> tpw = new ArrayList<>();
+                            JsonArray ja3 = new Gson().fromJson(rs.getString("third_place_winners"), JsonArray.class);
+                            if (ja3 != null) {
+                                ja3.forEach(uuid -> tpw.add(UUID.fromString(uuid.getAsString())));
+                            }
+                            innerData.put(game, tpw);
+                            break;
+                        case THIRD_PLACE_GROUP:
+                            String tpg = rs.getString("third_place_group");
+                            innerData.put(game, tpg);
+                            break;
                     }
                 }
             }
@@ -443,7 +517,11 @@ public class DatabaseManager {
 
                 Map<String, UUID> killer = new HashMap<>();
                 Map<String, List<UUID>> playerWinners = new HashMap<>();
+                Map<String, List<UUID>> secondPlaceWinners = new HashMap<>();
+                Map<String, List<UUID>> thirdPlaceWinners = new HashMap<>();
                 Map<String, String> winnerGroup = new HashMap<>();
+                Map<String, String> secondPlaceGroup = new HashMap<>();
+                Map<String, String> thirdPlaceGroup = new HashMap<>();
 
                 for (Map.Entry<WinnerType, Map<String, Object>> wtEntry : data.entrySet()) {
                     for (Map.Entry<String, Object> gameEntry : wtEntry.getValue().entrySet()) {
@@ -459,11 +537,23 @@ public class DatabaseManager {
                             case PLAYER_WINNER:
                                 playerWinners.put(game, (List<UUID>) innerObject);
                                 break;
+                            case SECOND_PLACE_WINNER:
+                                secondPlaceWinners.put(game, (List<UUID>) innerObject);
+                                break;
+                            case SECOND_PLACE_GROUP:
+                                secondPlaceGroup.put(game, (String) innerObject);
+                                break;
+                            case THIRD_PLACE_WINNER:
+                                thirdPlaceWinners.put(game, (List<UUID>) innerObject);
+                                break;
+                            case THIRD_PLACE_GROUP:
+                                thirdPlaceGroup.put(game, (String) innerObject);
+                                break;
                         }
                     }
                 }
 
-                Winners winner = new Winners(dateEntry.getKey(), killer, playerWinners, winnerGroup);
+                Winners winner = new Winners(dateEntry.getKey(), killer, playerWinners, secondPlaceWinners, thirdPlaceWinners, winnerGroup, secondPlaceGroup, thirdPlaceGroup);
                 winners.add(winner);
             }
 

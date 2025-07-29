@@ -41,11 +41,15 @@ public class Winners implements Comparable<Winners> {
     private final Date date;
     private final Map<String, UUID> killer;
     private final Map<String, List<UUID>> playerWinners;
+    private final Map<String, List<UUID>> secondPlaceWinners;
+    private final Map<String, List<UUID>> thirdPlaceWinners;
     private final Map<String, String> winnerGroup;
+    private final Map<String, String> secondPlaceGroup;
+    private final Map<String, String> thirdPlaceGroup;
     private boolean isModified;
 
     public Winners(@NotNull Date date) {
-        this(date, null, null, null);
+        this(date, null, null, null, null, null, null, null);
         isModified = true;
     }
 
@@ -53,10 +57,25 @@ public class Winners implements Comparable<Winners> {
                    @Nullable Map<String, UUID> killer,
                    @Nullable Map<String, List<UUID>> playerWinners,
                    @Nullable Map<String, String> winnerGroup) {
+        this(date, killer, playerWinners, null, null, winnerGroup, null, null);
+    }
+
+    public Winners(@NotNull Date date,
+                   @Nullable Map<String, UUID> killer,
+                   @Nullable Map<String, List<UUID>> playerWinners,
+                   @Nullable Map<String, List<UUID>> secondPlaceWinners,
+                   @Nullable Map<String, List<UUID>> thirdPlaceWinners,
+                   @Nullable Map<String, String> winnerGroup,
+                   @Nullable Map<String, String> secondPlaceGroup,
+                   @Nullable Map<String, String> thirdPlaceGroup) {
         this.date = date;
         this.killer = caseInsensitiveMap(killer);
         this.playerWinners = caseInsensitiveMap(playerWinners);
+        this.secondPlaceWinners = caseInsensitiveMap(secondPlaceWinners);
+        this.thirdPlaceWinners = caseInsensitiveMap(thirdPlaceWinners);
         this.winnerGroup = caseInsensitiveMap(winnerGroup);
+        this.secondPlaceGroup = caseInsensitiveMap(secondPlaceGroup);
+        this.thirdPlaceGroup = caseInsensitiveMap(thirdPlaceGroup);
     }
 
     public Date getDate() {
@@ -75,6 +94,22 @@ public class Winners implements Comparable<Winners> {
         return winnerGroup.get(game);
     }
 
+    public List<UUID> getSecondPlaceWinners(String game) {
+        return secondPlaceWinners.get(game);
+    }
+
+    public List<UUID> getThirdPlaceWinners(String game) {
+        return thirdPlaceWinners.get(game);
+    }
+
+    public String getSecondPlaceGroup(String game) {
+        return secondPlaceGroup.get(game);
+    }
+
+    public String getThirdPlaceGroup(String game) {
+        return thirdPlaceGroup.get(game);
+    }
+
     public void setKiller(String game, UUID uuid) {
         killer.put(game, uuid);
         isModified = true;
@@ -87,6 +122,26 @@ public class Winners implements Comparable<Winners> {
 
     public void setWinners(String game, List<UUID> winners) {
         playerWinners.put(game, winners);
+        isModified = true;
+    }
+
+    public void setSecondPlaceWinners(String game, List<UUID> winners) {
+        secondPlaceWinners.put(game, winners);
+        isModified = true;
+    }
+
+    public void setThirdPlaceWinners(String game, List<UUID> winners) {
+        thirdPlaceWinners.put(game, winners);
+        isModified = true;
+    }
+
+    public void setSecondPlaceGroup(String game, String group) {
+        secondPlaceGroup.put(game, group);
+        isModified = true;
+    }
+
+    public void setThirdPlaceGroup(String game, String group) {
+        thirdPlaceGroup.put(game, group);
         isModified = true;
     }
 

@@ -46,6 +46,28 @@ public class GameConfiguration extends BaseGameConfiguration {
     private Boolean winnerQuitMessage = false;
     private String permission = "";
 
+    @Path("leaguepoints.first")
+    private Integer leaguePointsFirst = 0;
+    @Path("leaguepoints.second")
+    private Integer leaguePointsSecond = 0;
+    @Path("leaguepoints.third")
+    private Integer leaguePointsThird = 0;
+    @Path("leaguepoints.kill")
+    private Integer leaguePointsKill = 0;
+
+    public Integer getLeaguePointsFirst() {
+        return leaguePointsFirst;
+    }
+    public Integer getLeaguePointsSecond() {
+        return leaguePointsSecond;
+    }
+    public Integer getLeaguePointsThird() {
+        return leaguePointsThird;
+    }
+    public Integer getLeaguePointsKill() {
+        return leaguePointsKill;
+    }
+
     public GameConfiguration() {
         this(Collections.emptyMap());
     }
