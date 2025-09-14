@@ -29,6 +29,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.text.MessageFormat;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
@@ -179,7 +180,7 @@ public abstract class BaseGame {
                         if (killerGroup != null) {
                             killer.sendMessage("&aSeu clan recebeu &f" + points + " pontos &apela sua kill!");
                             Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
-                                String.format("clanleague addevent %s %d %s", killerGroup.getName(), points, gameName));
+                                String.format("clanleague addevent %s %d %s", killerGroup.getName(), points, "Kills - " + getEventNameForLeague()));
                         }
                     }
                 }
@@ -388,6 +389,12 @@ public abstract class BaseGame {
 
     public @NotNull String getLang(@NotNull String key, Object... args) {
         return plugin.getLang(key, this, args);
+    }
+
+    protected String getEventNameForLeague() {
+        SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy");
+        String date = sdf.format(new Date());
+        return config.getName() + " - " + date;
     }
 
     protected boolean teleport(@Nullable Warrior warrior, @NotNull Location destination) {

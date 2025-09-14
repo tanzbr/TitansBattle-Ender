@@ -83,6 +83,7 @@ blocked_commands_everyone:
 
 #Send a webhook in game start, leave empty to disable
 discord_webhook_url: ""
+discord_bot_token: ""
 
 #Destinations
 destinations:

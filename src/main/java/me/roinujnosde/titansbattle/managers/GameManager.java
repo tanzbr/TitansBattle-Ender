@@ -51,8 +51,8 @@ public class GameManager {
             return;
         }
         Bukkit.getPluginManager().callEvent(new NewKillerEvent(killer, victim));
-        Bukkit.getServer().getOnlinePlayers().forEach((p) -> MessageUtils.sendActionBar(p,
-                MessageFormat.format(plugin.getLang("new_killer", gameConfig.getFileConfiguration()), killer.getName())));
+        // Bukkit.getServer().getOnlinePlayers().forEach((p) -> MessageUtils.sendActionBar(p,
+                // MessageFormat.format(plugin.getLang("new_killer", gameConfig.getFileConfiguration()), killer.getName())));
         plugin.getDatabaseManager().getTodaysWinners().setKiller(gameConfig.getName(), killer.getUniqueId());
     }
 

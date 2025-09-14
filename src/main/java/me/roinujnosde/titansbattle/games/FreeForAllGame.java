@@ -3,6 +3,7 @@ package me.roinujnosde.titansbattle.games;
 import me.roinujnosde.titansbattle.TitansBattle;
 import me.roinujnosde.titansbattle.events.GroupWinEvent;
 import me.roinujnosde.titansbattle.events.PlayerWinEvent;
+import me.roinujnosde.titansbattle.hooks.discord.DiscordAnnounces;
 import me.roinujnosde.titansbattle.managers.GroupManager;
 import me.roinujnosde.titansbattle.types.*;
 import me.roinujnosde.titansbattle.utils.Helper;
@@ -116,9 +117,13 @@ public class FreeForAllGame extends Game {
         super.onLobbyEnd();
         this.startTime = System.currentTimeMillis();
         String clans = getParticipantClans();
+        String players = getParticipantPlayers();
         int clanCount = getParticipantClanCount();
         int playerCount = getParticipants().size();
         broadcastKey("game_started", getConfig().getPreparationTime(), clans, clanCount, playerCount);
+
+        DiscordAnnounces.announceStarted(getConfig().getName(), clans, players);
+
         teleportToArena(getParticipants());
         startPreparation();
     }
@@ -214,6 +219,13 @@ public class FreeForAllGame extends Game {
                 duration,
                 killer.getName(), killerKillsCount
             );
+            DiscordAnnounces.announceEnded(
+                gameName, winnerName, winnerPoints, winnerPlayersCount, winnerKillsCount, winnerKillsPoints,
+                secondPlaceName, secondPlacePoints, secondPlacePlayersCount, secondPlaceKillsCount, secondPlaceKillsPoints,
+                thirdPlaceName, thirdPlacePoints, thirdPlacePlayersCount, thirdPlaceKillsCount, thirdPlaceKillsPoints,
+                duration,
+                killer.getName(), killerKillsCount
+            );
             discordAnnounce("discord_who_won_freeforall_podium",
                 winnerName, winnerPoints, winnerPlayersCount, winnerKillsCount, winnerKillsPoints,
                 secondPlaceName, secondPlacePoints, secondPlacePlayersCount, secondPlaceKillsCount, secondPlaceKillsPoints,
@@ -238,18 +250,18 @@ public class FreeForAllGame extends Game {
 
         // League points integration
         GameConfiguration config = getConfig();
-        String eventName = config.getName();
+        String eventName = getEventNameForLeague();
         if (winnerGroup != null && config.getLeaguePointsFirst() > 0) {
             Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
-                String.format("clanleague addevent %s %d %s", winnerGroup.getName(), config.getLeaguePointsFirst(), eventName));
+                String.format("clanleague addevent %s %d %s", winnerGroup.getName(), config.getLeaguePointsFirst(), "1º Lugar - " + eventName));
         }
         if (secondPlaceGroup != null && config.getLeaguePointsSecond() > 0) {
             Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
-                String.format("clanleague addevent %s %d %s", secondPlaceGroup.getName(), config.getLeaguePointsSecond(), eventName));
+                String.format("clanleague addevent %s %d %s", secondPlaceGroup.getName(), config.getLeaguePointsSecond(), "2º Lugar - " + eventName));
         }
         if (thirdPlaceGroup != null && config.getLeaguePointsThird() > 0) {
             Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
-                String.format("clanleague addevent %s %d %s", thirdPlaceGroup.getName(), config.getLeaguePointsThird(), eventName));
+                String.format("clanleague addevent %s %d %s", thirdPlaceGroup.getName(), config.getLeaguePointsThird(), "3º Lugar - " + eventName));
         }
     }
 
@@ -327,6 +339,14 @@ public class FreeForAllGame extends Game {
                 .map(this::getGroup)
                 .filter(g -> g != null)
                 .map(Group::getName)
+                .distinct()
+                .collect(Collectors.joining(", "));
+    }
+
+    private String getParticipantPlayers() {
+        return getParticipants().stream()
+                .map(warrior -> warrior.getName())
+                .filter(g -> g != null)
                 .distinct()
                 .collect(Collectors.joining(", "));
     }

@@ -2,6 +2,7 @@ package me.roinujnosde.titansbattle.games;
 
 import me.roinujnosde.titansbattle.BaseGame;
 import me.roinujnosde.titansbattle.TitansBattle;
+import me.roinujnosde.titansbattle.hooks.discord.DiscordAnnounces;
 import me.roinujnosde.titansbattle.managers.DatabaseManager;
 import me.roinujnosde.titansbattle.types.GameConfiguration;
 import me.roinujnosde.titansbattle.types.Group;
@@ -59,6 +60,12 @@ public abstract class Game extends BaseGame {
     @Override
     public void start() {
         super.start();
+
+        DiscordAnnounces.announceStart(
+            getConfig().getName(), // Game Name
+            getConfig().getAnnouncementStartingInterval()*getConfig().getAnnouncementStartingTimes()/60 // Starting time in minutes
+        );
+
         discordAnnounce("discord_game_starting");
         gameManager.setCurrentGame(this);
     }

@@ -25,6 +25,7 @@ import me.roinujnosde.titansbattle.challenges.Challenge;
 import me.roinujnosde.titansbattle.challenges.ChallengeRequest;
 import me.roinujnosde.titansbattle.dao.ConfigurationDao;
 import me.roinujnosde.titansbattle.games.Game;
+import me.roinujnosde.titansbattle.hooks.discord.DiscordBot;
 import me.roinujnosde.titansbattle.hooks.discord.DiscordWebhook;
 import me.roinujnosde.titansbattle.hooks.papi.PlaceholderHook;
 import me.roinujnosde.titansbattle.managers.*;
@@ -91,6 +92,13 @@ public final class TitansBattle extends JavaPlugin {
         taskManager.setupScheduler();
         placeholderHook = new PlaceholderHook(this);
         new Metrics(this, 14875);
+
+        try {
+            DiscordBot.setupDiscordBot();
+        } catch (InterruptedException e) {
+            getLogger().severe("Erro ao configurar Discord Bot: " + e.getMessage());
+            throw new RuntimeException(e);
+        }
     }
 
     public @Nullable BaseGame getBaseGameFrom(@NotNull Player player) {
