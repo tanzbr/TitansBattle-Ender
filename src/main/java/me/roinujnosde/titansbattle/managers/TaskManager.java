@@ -24,6 +24,7 @@
 package me.roinujnosde.titansbattle.managers;
 
 import me.roinujnosde.titansbattle.TitansBattle;
+import me.roinujnosde.titansbattle.hooks.discord.DiscordAnnounces;
 import me.roinujnosde.titansbattle.types.GameConfiguration;
 import me.roinujnosde.titansbattle.types.Prizes;
 import me.roinujnosde.titansbattle.types.Event;
@@ -58,16 +59,24 @@ public class TaskManager {
 
         boolean loggedMonthly = false;
         for (Event event : plugin.getConfigManager().getEvents()) {
-            TimerTask task = createTimerTask(event);
+            // Create Discord announcement task (30 minutes before)
+            TimerTask discordTask = createDiscordAnnouncementTask(event);
+            
+            // Create game start task
+            TimerTask gameStartTask = createTimerTask(event);
+            
             if (event.getFrequency() == Event.Frequency.MONTHLY) {
-                schedulerTimer.schedule(task, event.getDelay());
+                schedulerTimer.schedule(discordTask, event.getDiscordAnnouncementDelay());
+                schedulerTimer.schedule(gameStartTask, event.getDelay());
                 if (!loggedMonthly) {
                     plugin.getLogger().info("Scheduled a monthly event. This event will be repeated only after a restart.");
                     loggedMonthly = true;
                 }
                 continue;
             }
-            schedulerTimer.scheduleAtFixedRate(task, event.getDelay(), event.getFrequency().getPeriod());
+            
+            schedulerTimer.scheduleAtFixedRate(discordTask, event.getDiscordAnnouncementDelay(), event.getFrequency().getPeriod());
+            schedulerTimer.scheduleAtFixedRate(gameStartTask, event.getDelay(), event.getFrequency().getPeriod());
         }
     }
 
@@ -94,6 +103,29 @@ public class TaskManager {
                     return;
                 }
                 Bukkit.getScheduler().runTask(plugin, () -> plugin.getGameManager().start(config.get()));
+            }
+        };
+    }
+
+    private TimerTask createDiscordAnnouncementTask(Event event) {
+        return new TimerTask() {
+            @Override
+            public void run() {
+                Optional<GameConfiguration> config = plugin.getConfigurationDao()
+                        .getConfiguration(event.getGameName(), GameConfiguration.class);
+                if (!config.isPresent()) {
+                    plugin.getLogger().warning(String.format("Discord announcement: Game %s not found!", event.getGameName()));
+                    return;
+                }
+                
+                // Announce 30 minutes before the game starts
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    DiscordAnnounces.announceStart(
+                        config.get().getName(), // Game Name
+                        30 // 30 minutes before start
+                    );
+                    plugin.getLogger().info(String.format("Discord announcement sent for %s - starting in 30 minutes", config.get().getName()));
+                });
             }
         };
     }

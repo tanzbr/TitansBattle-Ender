@@ -92,6 +92,32 @@ public class Event {
         return -1;
     }
 
+    /**
+     * Gets the delay for Discord announcement (30 minutes before the event)
+     *
+     * @return the delay in milliseconds for Discord announcement
+     */
+    public long getDiscordAnnouncementDelay() {
+        long eventDelay = getDelay();
+        long thirtyMinutesInMillis = 30 * 60 * 1000; // 30 minutes in milliseconds
+        
+        long announcementDelay = eventDelay - thirtyMinutesInMillis;
+        
+        // If the announcement time is in the past, schedule it for the next occurrence minus 30 minutes
+        if (announcementDelay <= 0) {
+            switch (frequency) {
+                case HOURLY:
+                    return (frequency.getPeriod() + eventDelay - thirtyMinutesInMillis);
+                case DAILY:
+                case WEEKLY:
+                case MONTHLY:
+                    return (frequency.getPeriod() + eventDelay - thirtyMinutesInMillis);
+            }
+        }
+        
+        return announcementDelay;
+    }
+
     private int getHourlyDelay() {
         int difference = getMinute() - LocalTime.now().getMinute();
         if (difference < 0) {
