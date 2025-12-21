@@ -12,12 +12,20 @@ import org.bukkit.Bukkit;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import org.bukkit.GameMode;
+import org.bukkit.Location;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+
 import java.text.MessageFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static me.roinujnosde.titansbattle.BaseGameConfiguration.Prize.FIRST;
@@ -38,6 +46,11 @@ public class FreeForAllGame extends Game {
     private final List<EliminationRecord> eliminationOrder = new ArrayList<>();
     private long startTime;
 
+    // Saved inventories for readd functionality
+    private final Map<UUID, ItemStack[]> savedInventories = new HashMap<>();
+    private final Map<UUID, ItemStack[]> savedArmor = new HashMap<>();
+    private final Map<UUID, Integer> savedKillsBackup = new HashMap<>();
+
     private static class EliminationRecord {
         final Group group;
         final List<Warrior> members;
@@ -52,6 +65,119 @@ public class FreeForAllGame extends Game {
 
     public FreeForAllGame(TitansBattle plugin, GameConfiguration config) {
         super(plugin, config);
+    }
+
+    @Override
+    public void onDeath(@NotNull Warrior victim, @Nullable Warrior killer) {
+        // Save inventory before processing death
+        saveInventoryAsync(victim);
+        saveKillCount(victim);
+        super.onDeath(victim, killer);
+    }
+
+    private void saveInventoryAsync(@NotNull Warrior warrior) {
+        Player player = warrior.toOnlinePlayer();
+        if (player == null) return;
+
+        // Copy inventory on main thread (Bukkit requires this)
+        ItemStack[] inventory = player.getInventory().getContents().clone();
+        ItemStack[] armor = player.getInventory().getArmorContents().clone();
+        UUID uuid = warrior.getUniqueId();
+
+        // Clone items asynchronously
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            ItemStack[] invCopy = Arrays.stream(inventory)
+                .map(item -> item != null ? item.clone() : null)
+                .toArray(ItemStack[]::new);
+            ItemStack[] armorCopy = Arrays.stream(armor)
+                .map(item -> item != null ? item.clone() : null)
+                .toArray(ItemStack[]::new);
+
+            // Store on main thread
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                savedInventories.put(uuid, invCopy);
+                savedArmor.put(uuid, armorCopy);
+            });
+        });
+    }
+
+    private void saveKillCount(@NotNull Warrior warrior) {
+        int kills = killsCount.getOrDefault(warrior, 0);
+        savedKillsBackup.put(warrior.getUniqueId(), kills);
+    }
+
+    /**
+     * Re-adds a player to the game with their saved inventory.
+     * @param warrior The warrior to re-add
+     * @return true if the player was successfully re-added, false otherwise
+     */
+    public boolean readd(@NotNull Warrior warrior) {
+        Player player = warrior.toOnlinePlayer();
+        if (player == null) return false;
+
+        UUID uuid = warrior.getUniqueId();
+        if (!savedInventories.containsKey(uuid)) {
+            return false;
+        }
+
+        // Remove from casualties and casualtiesWatching
+        casualties.remove(warrior);
+        casualtiesWatching.remove(warrior);
+
+        // Re-add to participants
+        if (!participants.contains(warrior)) {
+            participants.add(warrior);
+        }
+
+        // Restore group
+        if (!groups.containsKey(warrior)) {
+            groups.put(warrior, warrior.getGroup());
+        }
+
+        // Restore kills
+        Integer savedKills = savedKillsBackup.get(uuid);
+        if (savedKills != null) {
+            killsCount.put(warrior, savedKills);
+        }
+
+        // Teleport to arena center
+        Location center = getConfig().getBorderCenter();
+        if (center != null) {
+            teleport(warrior, center);
+        } else {
+            // Fallback: use first arena entrance
+            Map<Integer, Location> entrances = getConfig().getArenaEntrances();
+            if (!entrances.isEmpty()) {
+                teleport(warrior, entrances.values().iterator().next());
+            }
+        }
+
+        // Restore inventory
+        ItemStack[] inv = savedInventories.get(uuid);
+        ItemStack[] armor = savedArmor.get(uuid);
+        if (inv != null) {
+            player.getInventory().setContents(inv);
+        }
+        if (armor != null) {
+            player.getInventory().setArmorContents(armor);
+        }
+
+        // Heal and set game mode
+        healAndClearEffects(warrior);
+        player.setGameMode(GameMode.SURVIVAL);
+        player.setAllowFlight(false);
+        player.setFlying(false);
+
+        return true;
+    }
+
+    /**
+     * Checks if a player can be re-added to the game.
+     * @param warrior The warrior to check
+     * @return true if the player has a saved inventory and can be re-added
+     */
+    public boolean canReadd(@NotNull Warrior warrior) {
+        return savedInventories.containsKey(warrior.getUniqueId());
     }
 
     @Override
@@ -145,7 +271,7 @@ public class FreeForAllGame extends Game {
     }
 
     @Override
-    protected void processWinners() {
+    protected void processWinners(boolean awardAllPrizes) {
         String gameName = getConfig().getName();
         Winners today = databaseManager.getTodaysWinners();
         if (getConfig().isUseKits()) {
@@ -251,17 +377,37 @@ public class FreeForAllGame extends Game {
         // League points integration
         GameConfiguration config = getConfig();
         String eventName = getEventNameForLeague();
-        if (winnerGroup != null && config.getLeaguePointsFirst() > 0) {
-            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
-                String.format("clanleague addevent %s %d %s", winnerGroup.getName(), config.getLeaguePointsFirst(), "1º Lugar - " + eventName));
+        if (awardAllPrizes) {
+            if (winnerGroup != null && config.getLeaguePointsFirst() > 0) {
+                Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
+                    String.format("clanleague addevent %s %d %s", winnerGroup.getName(), config.getLeaguePointsFirst(), "1º Lugar - " + eventName));
+            }
+            if (secondPlaceGroup != null && config.getLeaguePointsSecond() > 0) {
+                Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
+                    String.format("clanleague addevent %s %d %s", secondPlaceGroup.getName(), config.getLeaguePointsSecond(), "2º Lugar - " + eventName));
+            }
+            if (thirdPlaceGroup != null && config.getLeaguePointsThird() > 0) {
+                Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
+                    String.format("clanleague addevent %s %d %s", thirdPlaceGroup.getName(), config.getLeaguePointsThird(), "3º Lugar - " + eventName));
+            }
         }
-        if (secondPlaceGroup != null && config.getLeaguePointsSecond() > 0) {
-            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
-                String.format("clanleague addevent %s %d %s", secondPlaceGroup.getName(), config.getLeaguePointsSecond(), "2º Lugar - " + eventName));
-        }
-        if (thirdPlaceGroup != null && config.getLeaguePointsThird() > 0) {
-            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
-                String.format("clanleague addevent %s %d %s", thirdPlaceGroup.getName(), config.getLeaguePointsThird(), "3º Lugar - " + eventName));
+        
+        // Award kill points to all participants who got kills
+        int killPoints = config.getLeaguePointsKill();
+        if (killPoints > 0) {
+            for (Map.Entry<Warrior, Integer> entry : getKillsCount().entrySet()) {
+                Warrior killer = entry.getKey();
+                int kills = entry.getValue();
+                if (kills > 0) {
+                    Group killerGroup = getGroup(killer);
+                    if (killerGroup != null) {
+                        int totalPoints = killPoints * kills;
+                        Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
+                            String.format("clanleague addevent %s %d %s", killerGroup.getName(), totalPoints, 
+                                "Kills (" + kills + "x) - " + eventName));
+                    }
+                }
+            }
         }
     }
 
@@ -368,5 +514,14 @@ public class FreeForAllGame extends Game {
                 .filter(entry -> group.isMember(entry.getKey().getUniqueId()))
                 .mapToInt(Map.Entry::getValue)
                 .sum();
+    }
+
+    @Override
+    public void finish(boolean cancelled) {
+        // Clear saved inventories when game ends
+        savedInventories.clear();
+        savedArmor.clear();
+        savedKillsBackup.clear();
+        super.finish(cancelled);
     }
 }

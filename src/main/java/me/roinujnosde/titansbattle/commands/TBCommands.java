@@ -9,6 +9,7 @@ import me.roinujnosde.titansbattle.TitansBattle;
 import me.roinujnosde.titansbattle.challenges.ArenaConfiguration;
 import me.roinujnosde.titansbattle.dao.ConfigurationDao;
 import me.roinujnosde.titansbattle.exceptions.CommandNotSupportedException;
+import me.roinujnosde.titansbattle.games.FreeForAllGame;
 import me.roinujnosde.titansbattle.games.Game;
 import me.roinujnosde.titansbattle.managers.ConfigManager;
 import me.roinujnosde.titansbattle.managers.DatabaseManager;
@@ -101,12 +102,49 @@ public class TBCommands extends BaseCommand {
         sender.sendMessage(MessageFormat.format(plugin.getLang("has_been_kicked"), wName));
     }
 
+    @Subcommand("%readd|readd")
+    @CommandPermission("titansbattle.kick")
+    @Conditions("happening")
+    @Description("{@@command.description.readd}")
+    public void readd(CommandSender sender, OnlinePlayer target) {
+        java.util.Optional<Game> optGame = gameManager.getCurrentGame();
+        if (!optGame.isPresent()) {
+            return;
+        }
+
+        Game currentGame = optGame.get();
+        if (!(currentGame instanceof FreeForAllGame)) {
+            sender.sendMessage(plugin.getLang("readd_not_supported"));
+            return;
+        }
+
+        FreeForAllGame game = (FreeForAllGame) currentGame;
+        Warrior warrior = databaseManager.getWarrior(target.getPlayer());
+        String playerName = warrior.getName();
+
+        if (!game.canReadd(warrior)) {
+            sender.sendMessage(MessageFormat.format(plugin.getLang("no_saved_inventory"), playerName));
+            return;
+        }
+
+        if (game.readd(warrior)) {
+            // Global broadcast
+            String broadcastMsg = MessageFormat.format(plugin.getLang("player_readded"), playerName, sender.getName());
+            Bukkit.broadcastMessage(broadcastMsg);
+
+            // Message to the player
+            target.getPlayer().sendMessage(plugin.getLang("player_readded_by_staff"));
+        } else {
+            sender.sendMessage(plugin.getLang("cannot_readd"));
+        }
+    }
+
     @Subcommand("%cancel|cancel")
     @CommandPermission("titansbattle.cancel")
     @Conditions("happening")
     @Description("{@@command.description.cancel}")
-    public void cancel(CommandSender sender, Game game) {
-        game.cancel(sender);
+    public void cancel(CommandSender sender, Game game, @Default("false") boolean awardKillPoints) {
+        game.cancel(sender, awardKillPoints);
     }
 
     @Subcommand("%reload|reload")

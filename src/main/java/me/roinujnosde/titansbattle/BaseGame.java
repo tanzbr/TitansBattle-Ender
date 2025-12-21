@@ -92,6 +92,10 @@ public abstract class BaseGame {
     }
 
     public void finish(boolean cancelled) {
+        finish(cancelled, false);
+    }
+    
+    public void finish(boolean cancelled, boolean awardKillPoints) {
         // Control holograms for npcs   
         Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh off glad_iniciando");
         Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh off iniciangoagora");
@@ -112,15 +116,21 @@ public abstract class BaseGame {
         }
         Bukkit.getScheduler().runTask(plugin, () -> plugin.getDatabaseManager().saveAll());
         if (!cancelled) {
-            processWinners();
+            processWinners(true);
+        } else if (awardKillPoints) {
+            processWinners(false);
         }
     }
 
     public abstract void setWinner(@NotNull Warrior warrior) throws CommandNotSupportedException;
 
     public void cancel(@NotNull CommandSender sender) {
+        cancel(sender, false);
+    }
+    
+    public void cancel(@NotNull CommandSender sender, boolean awardKillPoints) {
         broadcastKey("cancelled", sender.getName());
-        finish(true);
+        finish(true, awardKillPoints);
     }
 
     public void onJoin(@NotNull Warrior warrior) {
@@ -171,16 +181,14 @@ public abstract class BaseGame {
             if (killer != null) {
                 killer.increaseKills(gameName);
                 increaseKills(killer);
-                // Award league points to killer's clan if configured
+                // Notify killer that points will be awarded at game end
                 if (getConfig() instanceof GameConfiguration) {
                     GameConfiguration config = (GameConfiguration) getConfig();
                     int points = config.getLeaguePointsKill();
                     if (points > 0) {
                         Group killerGroup = getGroup(killer);
                         if (killerGroup != null) {
-                            killer.sendMessage("&aSeu clan recebeu &f" + points + " pontos &apela sua kill!");
-                            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
-                                String.format("clanleague addevent %s %d %s", killerGroup.getName(), points, "Kills - " + getEventNameForLeague()));
+                            killer.sendMessage("&aSeu clan receberá &f" + points + " pontos &apela sua kill ao final do evento!");
                         }
                     }
                 }
@@ -423,7 +431,7 @@ public abstract class BaseGame {
 
     protected abstract void onLobbyEnd();
 
-    protected abstract void processWinners();
+    protected abstract void processWinners(boolean awardAllPrizes);
 
     protected void givePrizes(Prize prize, @Nullable Group group, @Nullable List<Warrior> warriors) {
         List<Player> leaders = new ArrayList<>();

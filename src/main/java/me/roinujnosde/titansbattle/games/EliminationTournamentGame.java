@@ -386,7 +386,7 @@ public class EliminationTournamentGame extends Game {
     }
 
     @Override
-    protected void processWinners() {
+    protected void processWinners(boolean awardAllPrizes) {
         Winners todayWinners = databaseManager.getTodaysWinners();
 
         Group firstGroup = getAnyGroup(firstPlaceWinners);
@@ -422,6 +422,28 @@ public class EliminationTournamentGame extends Game {
         discordAnnounce("discord_who_won_tournament", getWinnerName(firstPlaceWinners),
                 getWinnerName(secondPlaceWinners), getWinnerName(thirdPlaceWinners));
         firstPlaceWinners.forEach(warrior -> warrior.increaseVictories(getConfig().getName()));
+        
+        // Award kill points to all participants who got kills (only if awarding all prizes or just kill points)
+        if (awardAllPrizes) {
+            GameConfiguration config = getConfig();
+            int killPoints = config.getLeaguePointsKill();
+            String eventName = getEventNameForLeague();
+            if (killPoints > 0) {
+                for (Map.Entry<Warrior, Integer> entry : getKillsCount().entrySet()) {
+                    Warrior killerWarrior = entry.getKey();
+                    int kills = entry.getValue();
+                    if (kills > 0) {
+                        Group killerGroup = getGroup(killerWarrior);
+                        if (killerGroup != null) {
+                            int totalPoints = killPoints * kills;
+                            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
+                                String.format("clanleague addevent %s %d %s", killerGroup.getName(), totalPoints, 
+                                    "Kills (" + kills + "x) - " + eventName));
+                        }
+                    }
+                }
+            }
+        }
     }
 
     @Override

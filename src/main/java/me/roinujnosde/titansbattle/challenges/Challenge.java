@@ -92,7 +92,7 @@ public class Challenge extends BaseGame {
     }
 
     @Override
-    protected void processWinners() {
+    protected void processWinners(boolean awardAllPrizes) {
         if (winnerGroup != null) {
             Bukkit.getPluginManager().callEvent(new GroupWinEvent(winnerGroup));
             getCasualties().stream().filter(p -> winnerGroup.isMember(p.getUniqueId())).forEach(winners::add);
