@@ -23,7 +23,7 @@ public class DiscordBot extends ListenerAdapter {
     public static NewsChannel eventChannel;
 
     public static final String EVENT_CHANNEL_ID = "1394736975113748500";
-    public static final String EVENT_ROLE_ID = "879085101592502273";
+    public static final String EVENT_ROLE_ID = "1455703005080060189";
 
     public static void setupDiscordBot() throws InterruptedException {
         Bukkit.getLogger().info("[TitansBattle] Configurando Discord Bot...");

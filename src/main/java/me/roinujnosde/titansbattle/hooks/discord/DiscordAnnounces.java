@@ -13,7 +13,7 @@ public class DiscordAnnounces {
             return; // Discord bot not initialized, skip announcement
         }
         
-        DiscordBot.eventChannel.sendMessage("<@&879085101592502273>")
+        DiscordBot.eventChannel.sendMessage("<@&1455703005080060189>")
             .addEmbeds(DiscordEmbeds.getStartingEmbed(name, minutes))
             .addActionRow(
                 Button.primary("events:addRole", Emoji.fromUnicode("\ud83d\udd14")).withLabel("Receber notificações"),
@@ -26,7 +26,7 @@ public class DiscordAnnounces {
             return; // Discord bot not initialized, skip announcement
         }
         
-        DiscordBot.eventChannel.sendMessage("<@&879085101592502273>")
+        DiscordBot.eventChannel.sendMessage("<@&1455703005080060189>")
             .addEmbeds(DiscordEmbeds.getStartedEmbed(name, clans, players))
             .addActionRow(
                 Button.primary("events:addRole", Emoji.fromUnicode("\ud83d\udd14")).withLabel("Receber notificações"),
@@ -39,7 +39,7 @@ public class DiscordAnnounces {
             return; // Discord bot not initialized, skip announcement
         }
         
-        DiscordBot.eventChannel.sendMessage("<@&879085101592502273>") //<@&879085101592502273>
+        DiscordBot.eventChannel.sendMessage("<@&1455703005080060189>") //<@&1455703005080060189>
             .addEmbeds(DiscordEmbeds.getEndedEmbed(name, winnerName, winnerPoints, winnerPlayersCount, winnerKillsCount, winnerKillsPoints, secondPlaceName, secondPlacePoints, secondPlacePlayersCount, secondPlaceKillsCount, secondPlaceKillsPoints, thirdPlaceName, thirdPlacePoints, thirdPlacePlayersCount, thirdPlaceKillsCount, thirdPlaceKillsPoints, duration, killerName, killerKillsCount))
             .addActionRow(
                 Button.primary("events:addRole", Emoji.fromUnicode("\ud83d\udd14")).withLabel("Receber notificações"),
