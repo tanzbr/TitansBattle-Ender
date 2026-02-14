@@ -47,6 +47,7 @@ public abstract class BaseGame {
     protected BaseGameConfiguration config;
     protected boolean lobby;
     protected boolean battle;
+    protected boolean cancelled = false;
     protected final List<Warrior> participants = new ArrayList<>();
     protected final Map<Warrior, Group> groups = new HashMap<>();
     protected final HashMap<Warrior, Integer> killsCount = new HashMap<>();
@@ -73,6 +74,7 @@ public abstract class BaseGame {
         if (!getConfig().locationsSet()) {
             throw new IllegalStateException("You didn't set all locations!");
         }
+        this.cancelled = false;
         LobbyStartEvent event = new LobbyStartEvent(this);
         Bukkit.getPluginManager().callEvent(event);
         if (event.isCancelled()) {
@@ -129,6 +131,7 @@ public abstract class BaseGame {
     }
     
     public void cancel(@NotNull CommandSender sender, boolean awardKillPoints) {
+        this.cancelled = true;
         broadcastKey("cancelled", sender.getName());
         finish(true, awardKillPoints);
     }
@@ -503,7 +506,7 @@ public abstract class BaseGame {
         }
         participants.remove(warrior);
         Group group = getGroup(warrior);
-        if (!isLobby()) {
+        if (!isLobby() && !cancelled) {
             runCommandsAfterBattle(Collections.singletonList(warrior));
             processRemainingPlayers(warrior);
             //last participant

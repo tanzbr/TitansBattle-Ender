@@ -9,6 +9,9 @@ import me.roinujnosde.titansbattle.types.*;
 import me.roinujnosde.titansbattle.utils.Helper;
 import me.roinujnosde.titansbattle.utils.SoundUtils;
 import org.bukkit.Bukkit;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
+import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -26,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 import static me.roinujnosde.titansbattle.BaseGameConfiguration.Prize.FIRST;
@@ -45,6 +49,8 @@ public class FreeForAllGame extends Game {
     private @Nullable List<Warrior> thirdPlaceWinners;
     private final List<EliminationRecord> eliminationOrder = new ArrayList<>();
     private long startTime;
+    private @Nullable BukkitTask deathmatchTask;
+    private boolean deathmatchStarted;
 
     // Saved inventories for readd functionality
     private final Map<UUID, ItemStack[]> savedInventories = new HashMap<>();
@@ -141,15 +147,9 @@ public class FreeForAllGame extends Game {
         }
 
         // Teleport to arena center
-        Location center = getConfig().getBorderCenter();
-        if (center != null) {
-            teleport(warrior, center);
-        } else {
-            // Fallback: use first arena entrance
-            Map<Integer, Location> entrances = getConfig().getArenaEntrances();
-            if (!entrances.isEmpty()) {
-                teleport(warrior, entrances.values().iterator().next());
-            }
+        Location destination = getReaddDestination();
+        if (destination != null) {
+            teleport(warrior, destination);
         }
 
         // Restore inventory
@@ -167,6 +167,10 @@ public class FreeForAllGame extends Game {
         player.setGameMode(GameMode.SURVIVAL);
         player.setAllowFlight(false);
         player.setFlying(false);
+
+        if (deathmatchStarted) {
+            applyDeathmatchEffects(Collections.singletonList(warrior));
+        }
 
         return true;
     }
@@ -192,6 +196,9 @@ public class FreeForAllGame extends Game {
 
     @Override
     protected void processRemainingPlayers(@NotNull Warrior warrior) {
+        if (cancelled) {
+            return;
+        }
         // Track elimination BEFORE checking remaining players
         trackEliminationIfNecessary(warrior);
         
@@ -252,6 +259,7 @@ public class FreeForAllGame extends Game {
 
         teleportToArena(getParticipants());
         startPreparation();
+        scheduleDeathmatch();
     }
 
     private void determinePodiumFromEliminations() {
@@ -522,6 +530,135 @@ public class FreeForAllGame extends Game {
         savedInventories.clear();
         savedArmor.clear();
         savedKillsBackup.clear();
+        cancelDeathmatchTask();
+        clearDeathmatchEffects();
+        deathmatchStarted = false;
         super.finish(cancelled);
+    }
+
+    private void scheduleDeathmatch() {
+        Integer minutes = getConfig().getDeathmatchAfterMinutes();
+        if (minutes == null || minutes <= 0) {
+            return;
+        }
+
+        Map<Integer, Location> entrances = getConfig().getDeathmatchEntrances();
+        if (entrances.isEmpty()) {
+            plugin.debug("Deathmatch entrances not configured; skipping deathmatch phase.");
+            return;
+        }
+
+        long delayTicks = (getConfig().getPreparationTime() + (minutes * 60L)) * 20L;
+        deathmatchTask = Bukkit.getScheduler().runTaskLater(plugin, this::startDeathmatch, delayTicks);
+        addTask(deathmatchTask);
+    }
+
+    private void startDeathmatch() {
+        if (cancelled || deathmatchStarted || !battle) {
+            return;
+        }
+        deathmatchStarted = true;
+
+        List<Warrior> targets = new ArrayList<>(getParticipants());
+        if (targets.isEmpty()) {
+            return;
+        }
+
+        teleportToDeathmatch(targets);
+        applyDeathmatchEffects(targets);
+        broadcast("Deathmatch has begun! Remaining players have been moved to the deathmatch arena.");
+    }
+
+    private void teleportToDeathmatch(@NotNull List<Warrior> warriors) {
+        List<Location> entrances = new ArrayList<>(getConfig().getDeathmatchEntrances().values());
+        if (entrances.isEmpty()) {
+            return;
+        }
+
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+
+        if (getConfig().isGroupMode()) {
+            Map<Group, List<Warrior>> groupToWarriors = new HashMap<>();
+            for (Warrior warrior : warriors) {
+                Group group = getGroup(warrior);
+                if (group == null) {
+                    continue;
+                }
+                groupToWarriors.computeIfAbsent(group, k -> new ArrayList<>()).add(warrior);
+            }
+
+            for (List<Warrior> groupWarriors : groupToWarriors.values()) {
+                if (groupWarriors.isEmpty()) {
+                    continue;
+                }
+                Location entrance = entrances.get(random.nextInt(entrances.size()));
+                teleport(groupWarriors, entrance);
+            }
+        } else {
+            for (Warrior warrior : warriors) {
+                Location entrance = entrances.get(random.nextInt(entrances.size()));
+                teleport(warrior, entrance);
+            }
+        }
+    }
+
+    private void applyDeathmatchEffects(@NotNull Collection<Warrior> warriors) {
+        for (Warrior warrior : warriors) {
+            Player player = warrior.toOnlinePlayer();
+            if (player == null) {
+                continue;
+            }
+            player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, 1, false, true));
+            player.addPotionEffect(new PotionEffect(PotionEffectType.INCREASE_DAMAGE, Integer.MAX_VALUE, 1, false, true));
+        }
+    }
+
+    private void clearDeathmatchEffects() {
+        Collection<Warrior> warriors = new ArrayList<>(getParticipants());
+        warriors.addAll(getCasualties());
+        for (Warrior warrior : warriors) {
+            Player player = warrior.toOnlinePlayer();
+            if (player == null) {
+                continue;
+            }
+            player.removePotionEffect(PotionEffectType.SPEED);
+            player.removePotionEffect(PotionEffectType.INCREASE_DAMAGE);
+        }
+    }
+
+    private void cancelDeathmatchTask() {
+        if (deathmatchTask != null) {
+            deathmatchTask.cancel();
+            deathmatchTask = null;
+        }
+    }
+
+    private @Nullable Location getReaddDestination() {
+        if (deathmatchStarted) {
+            Location entrance = getRandomDeathmatchEntrance();
+            if (entrance != null) {
+                return entrance;
+            }
+        }
+
+        Location center = getConfig().getBorderCenter();
+        if (center != null) {
+            return center;
+        }
+
+        Map<Integer, Location> entrances = getConfig().getArenaEntrances();
+        if (!entrances.isEmpty()) {
+            return entrances.values().iterator().next();
+        }
+        return null;
+    }
+
+    private @Nullable Location getRandomDeathmatchEntrance() {
+        Map<Integer, Location> entrances = getConfig().getDeathmatchEntrances();
+        if (entrances.isEmpty()) {
+            return null;
+        }
+        List<Location> locations = new ArrayList<>(entrances.values());
+        return locations.get(ThreadLocalRandom.current().nextInt(locations.size()));
     }
 }

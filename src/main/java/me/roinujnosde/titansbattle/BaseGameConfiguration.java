@@ -60,6 +60,8 @@ public abstract class BaseGameConfiguration implements ConfigurationSerializable
     protected Location lobby;
     @Path("destination.arena_entrances")
     protected Map<Integer, Location> arenaEntrances = new HashMap<>();
+    @Path("destination.deathmatch_entrances")
+    protected Map<Integer, Location> deathmatchEntrances = new HashMap<>();
     @Path("destination.border_center")
     protected Location borderCenter;
 
@@ -67,6 +69,8 @@ public abstract class BaseGameConfiguration implements ConfigurationSerializable
     protected Integer preparationTime = 30;
     @Path("time.expiration")
     protected Integer expirationTime = 3600;
+    @Path("time.deathmatch_after_minutes")
+    protected Integer deathmatchAfterMinutes = 0;
 
     @Path("run_commands.before_battle")
     protected @Nullable List<String> commandsBeforeBattle;
@@ -209,6 +213,10 @@ public abstract class BaseGameConfiguration implements ConfigurationSerializable
         return arenaEntrances;
     }
 
+    public Map<Integer, Location> getDeathmatchEntrances() {
+        return deathmatchEntrances;
+    }
+
     public Location getBorderCenter() {
         return borderCenter;
     }
@@ -239,6 +247,10 @@ public abstract class BaseGameConfiguration implements ConfigurationSerializable
 
     public Integer getExpirationTime() {
         return expirationTime;
+    }
+
+    public Integer getDeathmatchAfterMinutes() {
+        return deathmatchAfterMinutes;
     }
 
     public @Nullable List<String> getCommandsBeforeBattle() {

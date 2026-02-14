@@ -92,6 +92,9 @@ public class EliminationTournamentGame extends Game {
 
     @Override
     protected void processRemainingPlayers(@NotNull Warrior warrior) {
+        if (cancelled) {
+            return;
+        }
         Player player = warrior.toOnlinePlayer();
         if (player != null) {
             Bukkit.getScheduler().runTaskLater(plugin, () -> player.spigot().respawn(), 1L);
