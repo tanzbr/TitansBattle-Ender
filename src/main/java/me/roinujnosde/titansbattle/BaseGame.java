@@ -355,11 +355,16 @@ public abstract class BaseGame {
         }
         message = MessageFormat.format(message, args);
         if (message.startsWith("!!broadcast")) {
-
+            // Remove !!broadcast prefix
+            String cleanMessage = message.replace("!!broadcast", "").trim();
+            
+            // Convert \n to ;; for pbc command
+            String pbcMessage = cleanMessage.replace("\n", ";;");
+            
             // Sync message to all gamemodes, except lobby and events
-            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "pbc msg all-gamemodes " + message.replace("!!broadcast", ""));
+            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "pbc msg all-gamemodes " + pbcMessage);
 
-            Bukkit.broadcastMessage(message.replace("!!broadcast", ""));
+            Bukkit.broadcastMessage(cleanMessage);
         } else {
             for (Warrior warrior : getParticipants()) {
                 warrior.sendMessage(message);
