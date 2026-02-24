@@ -736,7 +736,7 @@ public class FreeForAllGame extends Game {
             }
             player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, 1, false, true));
             player.addPotionEffect(
-                    new PotionEffect(PotionEffectType.INCREASE_DAMAGE, Integer.MAX_VALUE, 1, false, true));
+                    new PotionEffect(PotionEffectType.STRENGTH, Integer.MAX_VALUE, 1, false, true));
         }
     }
 
@@ -749,7 +749,7 @@ public class FreeForAllGame extends Game {
                 continue;
             }
             player.removePotionEffect(PotionEffectType.SPEED);
-            player.removePotionEffect(PotionEffectType.INCREASE_DAMAGE);
+            player.removePotionEffect(PotionEffectType.STRENGTH);
         }
     }
 

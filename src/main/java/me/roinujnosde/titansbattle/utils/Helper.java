@@ -12,6 +12,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
+import org.bukkit.entity.TNTPrimed;
 import org.bukkit.projectiles.ProjectileSource;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -216,7 +217,8 @@ public class Helper {
     }
 
     /**
-     * Converts a UUID list to a String list using {@link java.util.UUID#toString() toString}
+     * Converts a UUID list to a String list using {@link java.util.UUID#toString()
+     * toString}
      *
      * @param list the UUID list
      * @return the String list
@@ -285,11 +287,15 @@ public class Helper {
         Player investigated = null;
         if (entity instanceof Player) {
             investigated = (Player) entity;
-        }
-        if (entity instanceof Projectile) {
+        } else if (entity instanceof Projectile) {
             ProjectileSource shooter = ((Projectile) entity).getShooter();
             if (shooter instanceof Player) {
                 investigated = (Player) shooter;
+            }
+        } else if (entity instanceof TNTPrimed) {
+            Entity source = ((TNTPrimed) entity).getSource();
+            if (source instanceof Player) {
+                investigated = (Player) source;
             }
         }
         return investigated;

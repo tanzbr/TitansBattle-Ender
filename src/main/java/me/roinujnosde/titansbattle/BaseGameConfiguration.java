@@ -77,6 +77,8 @@ public abstract class BaseGameConfiguration implements ConfigurationSerializable
     protected String deathmatchBossbarTitle = "&c&lDEATHMATCH!";
     @Path("allow_block_interaction")
     protected Boolean allowBlockInteraction = false;
+    @Path("whitelisted_drop_materials")
+    protected List<String> whitelistedDropMaterials;
     @Path("points.early_kill_bonus")
     protected Integer earlyKillPointsBonus = 1;
     @Path("combat.anti_camp.enabled")
@@ -301,6 +303,10 @@ public abstract class BaseGameConfiguration implements ConfigurationSerializable
 
     public Boolean isAllowBlockInteraction() {
         return allowBlockInteraction;
+    }
+
+    public @Nullable List<String> getWhitelistedDropMaterials() {
+        return whitelistedDropMaterials;
     }
 
     public Boolean isWorldBorder() {

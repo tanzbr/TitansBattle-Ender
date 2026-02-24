@@ -6,7 +6,6 @@ import me.roinujnosde.titansbattle.TitansBattle;
 import me.roinujnosde.titansbattle.managers.DatabaseManager;
 import me.roinujnosde.titansbattle.managers.GroupManager;
 import me.roinujnosde.titansbattle.types.Warrior;
-import me.roinujnosde.titansbattle.utils.Helper;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
@@ -53,8 +52,12 @@ public class EntityDamageListener extends TBListener {
             return;
         }
         event.setCancelled(false);
-        if (event instanceof EntityDamageByEntityEvent) {
-            processEntityDamageByEntityEvent(event, defender, game);
+        Player attacker = null;
+        if (event.getDamageSource().getCausingEntity() instanceof Player) {
+            attacker = (Player) event.getDamageSource().getCausingEntity();
+        }
+        if (attacker != null || event instanceof EntityDamageByEntityEvent) {
+            processEntityDamageEvent(event, defender, attacker, game);
         }
     }
 
@@ -63,28 +66,26 @@ public class EntityDamageListener extends TBListener {
         if (!(event.getEntity() instanceof Player)) {
             return;
         }
-        if (event instanceof EntityDamageByEntityEvent) {
-            EntityDamageByEntityEvent subEvent = (EntityDamageByEntityEvent) event;
-            Player attacker = Helper.getPlayerAttackerOrKiller(subEvent.getDamager());
-            if (attacker != null) {
-                Player defender = (Player) event.getEntity();
-                BaseGame game = plugin.getBaseGameFrom(defender);
-                if (game != null) {
-                    Warrior attackerWarrior = plugin.getDatabaseManager().getWarrior(attacker);
-                    if (game.isInBattle(attackerWarrior) && isDamageTypeAllowed(subEvent, game)) {
-                        game.addDamageDealt(attackerWarrior, subEvent.getFinalDamage());
-                    }
+        Player attacker = null;
+        if (event.getDamageSource().getCausingEntity() instanceof Player) {
+            attacker = (Player) event.getDamageSource().getCausingEntity();
+        }
+        if (attacker != null) {
+            Player defender = (Player) event.getEntity();
+            BaseGame game = plugin.getBaseGameFrom(defender);
+            if (game != null) {
+                Warrior attackerWarrior = plugin.getDatabaseManager().getWarrior(attacker);
+                if (game.isInBattle(attackerWarrior) && isDamageTypeAllowed(event, game)) {
+                    game.addDamageDealt(attackerWarrior, event.getFinalDamage());
                 }
             }
         }
     }
 
-    private void processEntityDamageByEntityEvent(EntityDamageEvent event, Player defender, BaseGame game) {
+    private void processEntityDamageEvent(EntityDamageEvent event, Player defender, Player attacker, BaseGame game) {
         DatabaseManager dm = plugin.getDatabaseManager();
 
-        EntityDamageByEntityEvent subEvent = (EntityDamageByEntityEvent) event;
-        Player attacker = Helper.getPlayerAttackerOrKiller(subEvent.getDamager());
-        if (!isDamageTypeAllowed(subEvent, game)) {
+        if (attacker != null && !isDamageTypeAllowed(event, game)) {
             event.setCancelled(true);
             return;
         }
@@ -108,9 +109,9 @@ public class EntityDamageListener extends TBListener {
         }
     }
 
-    private boolean isDamageTypeAllowed(EntityDamageByEntityEvent event, BaseGame game) {
+    private boolean isDamageTypeAllowed(EntityDamageEvent event, BaseGame game) {
         BaseGameConfiguration config = game.getConfig();
-        if (event.getDamager() instanceof Projectile) {
+        if (event.getDamageSource().getDirectEntity() instanceof Projectile) {
             return config.isRangedDamage();
         } else {
             return config.isMeleeDamage();
