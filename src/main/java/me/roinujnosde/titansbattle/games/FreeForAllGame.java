@@ -9,6 +9,10 @@ import me.roinujnosde.titansbattle.types.*;
 import me.roinujnosde.titansbattle.utils.Helper;
 import me.roinujnosde.titansbattle.utils.SoundUtils;
 import org.bukkit.Bukkit;
+import org.bukkit.boss.BarColor;
+import org.bukkit.boss.BarStyle;
+import org.bukkit.boss.BossBar;
+import org.bukkit.ChatColor;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitTask;
@@ -25,8 +29,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
@@ -57,6 +63,9 @@ public class FreeForAllGame extends Game {
     private final Map<UUID, ItemStack[]> savedArmor = new HashMap<>();
     private final Map<UUID, Integer> savedKillsBackup = new HashMap<>();
 
+    private @Nullable BossBar deathmatchBossBar;
+    private final Map<Warrior, Integer> earlyKillsCount = new HashMap<>();
+
     private static class EliminationRecord {
         final Group group;
         final List<Warrior> members;
@@ -78,12 +87,18 @@ public class FreeForAllGame extends Game {
         // Save inventory before processing death
         saveInventoryAsync(victim);
         saveKillCount(victim);
+
+        if (!deathmatchStarted && killer != null) {
+            earlyKillsCount.put(killer, earlyKillsCount.getOrDefault(killer, 0) + 1);
+        }
+
         super.onDeath(victim, killer);
     }
 
     private void saveInventoryAsync(@NotNull Warrior warrior) {
         Player player = warrior.toOnlinePlayer();
-        if (player == null) return;
+        if (player == null)
+            return;
 
         // Copy inventory on main thread (Bukkit requires this)
         ItemStack[] inventory = player.getInventory().getContents().clone();
@@ -93,11 +108,11 @@ public class FreeForAllGame extends Game {
         // Clone items asynchronously
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             ItemStack[] invCopy = Arrays.stream(inventory)
-                .map(item -> item != null ? item.clone() : null)
-                .toArray(ItemStack[]::new);
+                    .map(item -> item != null ? item.clone() : null)
+                    .toArray(ItemStack[]::new);
             ItemStack[] armorCopy = Arrays.stream(armor)
-                .map(item -> item != null ? item.clone() : null)
-                .toArray(ItemStack[]::new);
+                    .map(item -> item != null ? item.clone() : null)
+                    .toArray(ItemStack[]::new);
 
             // Store on main thread
             Bukkit.getScheduler().runTask(plugin, () -> {
@@ -114,12 +129,14 @@ public class FreeForAllGame extends Game {
 
     /**
      * Re-adds a player to the game with their saved inventory.
+     * 
      * @param warrior The warrior to re-add
      * @return true if the player was successfully re-added, false otherwise
      */
     public boolean readd(@NotNull Warrior warrior) {
         Player player = warrior.toOnlinePlayer();
-        if (player == null) return false;
+        if (player == null)
+            return false;
 
         UUID uuid = warrior.getUniqueId();
         if (!savedInventories.containsKey(uuid)) {
@@ -170,6 +187,9 @@ public class FreeForAllGame extends Game {
 
         if (deathmatchStarted) {
             applyDeathmatchEffects(Collections.singletonList(warrior));
+            if (deathmatchBossBar != null && player != null) {
+                deathmatchBossBar.addPlayer(player);
+            }
         }
 
         return true;
@@ -177,6 +197,7 @@ public class FreeForAllGame extends Game {
 
     /**
      * Checks if a player can be re-added to the game.
+     * 
      * @param warrior The warrior to check
      * @return true if the player has a saved inventory and can be re-added
      */
@@ -201,7 +222,7 @@ public class FreeForAllGame extends Game {
         }
         // Track elimination BEFORE checking remaining players
         trackEliminationIfNecessary(warrior);
-        
+
         if (getConfig().isGroupMode()) {
             if (getGroupParticipants().size() == 1) {
                 determinePodiumFromEliminations();
@@ -219,7 +240,7 @@ public class FreeForAllGame extends Game {
             finish(false);
         }
     }
-    
+
     private void trackEliminationIfNecessary(@NotNull Warrior warrior) {
         if (getConfig().isGroupMode()) {
             Group group = getGroup(warrior);
@@ -229,7 +250,7 @@ public class FreeForAllGame extends Game {
                 long remainingMembers = getParticipants().stream()
                         .filter(p -> group.isMember(p.getUniqueId()) && !p.equals(warrior))
                         .count();
-                
+
                 // If no members left, this group is being eliminated
                 if (remainingMembers == 0) {
                     List<Warrior> allGroupMembers = getCasualties().stream()
@@ -269,7 +290,7 @@ public class FreeForAllGame extends Game {
             secondPlaceGroup = secondPlace.group;
             secondPlaceWinners = new ArrayList<>(secondPlace.members);
         }
-        
+
         // Third place: second-to-last eliminated team (lost in semifinals)
         if (eliminationOrder.size() >= 2) {
             EliminationRecord thirdPlace = eliminationOrder.get(eliminationOrder.size() - 2);
@@ -297,11 +318,11 @@ public class FreeForAllGame extends Game {
             today.setWinnerGroup(gameName, winnerGroup.getName());
             getCasualties().stream().filter(p -> winnerGroup.isMember(p.getUniqueId())).forEach(winners::add);
         }
-        
+
         SoundUtils.playSound(VICTORY, plugin.getConfig(), winners, secondPlaceWinners, thirdPlaceWinners);
         PlayerWinEvent event = new PlayerWinEvent(this, winners);
         Bukkit.getPluginManager().callEvent(event);
-        
+
         if (killer != null) {
             plugin.getGameManager().setKiller(getConfig(), killer, null);
             SoundUtils.playSound(VICTORY, plugin.getConfig(), killer.toOnlinePlayer());
@@ -309,7 +330,7 @@ public class FreeForAllGame extends Game {
             givePrizes(KILLER, null, Collections.singletonList(killer));
             today.setKiller(gameName, killer.getUniqueId());
         }
-        
+
         today.setWinners(gameName, Helper.warriorListToUuidList(winners));
         if (secondPlaceWinners != null) {
             today.setSecondPlaceWinners(gameName, Helper.warriorListToUuidList(secondPlaceWinners));
@@ -323,12 +344,12 @@ public class FreeForAllGame extends Game {
                 today.setThirdPlaceGroup(gameName, thirdPlaceGroup.getName());
             }
         }
-        
+
         String winnerName = getWinnerName(winnerGroup, winners);
         String secondPlaceName = getWinnerName(secondPlaceGroup, secondPlaceWinners);
         String thirdPlaceName = getWinnerName(thirdPlaceGroup, thirdPlaceWinners);
         long duration = getEventDurationMinutes();
-        
+
         if (secondPlaceWinners != null || thirdPlaceWinners != null) {
             int winnerPlayersCount = winners != null ? winners.size() : 0;
             int winnerKillsCount = getWinnerGroupTotalKills();
@@ -347,40 +368,128 @@ public class FreeForAllGame extends Game {
             killer = findKiller();
             int killerKillsCount = killer != null && killsCount.containsKey(killer) ? killsCount.get(killer) : 0;
             broadcastKey("who_won_freeforall_podium",
-                winnerName, winnerPoints, winnerPlayersCount, winnerKillsCount, winnerKillsPoints,
-                secondPlaceName, secondPlacePoints, secondPlacePlayersCount, secondPlaceKillsCount, secondPlaceKillsPoints,
-                thirdPlaceName, thirdPlacePoints, thirdPlacePlayersCount, thirdPlaceKillsCount, thirdPlaceKillsPoints,
-                duration,
-                killer.getName(), killerKillsCount
-            );
+                    winnerName, winnerPoints, winnerPlayersCount, winnerKillsCount, winnerKillsPoints,
+                    secondPlaceName, secondPlacePoints, secondPlacePlayersCount, secondPlaceKillsCount,
+                    secondPlaceKillsPoints,
+                    thirdPlaceName, thirdPlacePoints, thirdPlacePlayersCount, thirdPlaceKillsCount,
+                    thirdPlaceKillsPoints,
+                    duration,
+                    killer.getName(), killerKillsCount);
             DiscordAnnounces.announceEnded(
-                gameName, winnerName, winnerPoints, winnerPlayersCount, winnerKillsCount, winnerKillsPoints,
-                secondPlaceName, secondPlacePoints, secondPlacePlayersCount, secondPlaceKillsCount, secondPlaceKillsPoints,
-                thirdPlaceName, thirdPlacePoints, thirdPlacePlayersCount, thirdPlaceKillsCount, thirdPlaceKillsPoints,
-                duration,
-                killer.getName(), killerKillsCount
-            );
+                    gameName, winnerName, winnerPoints, winnerPlayersCount, winnerKillsCount, winnerKillsPoints,
+                    secondPlaceName, secondPlacePoints, secondPlacePlayersCount, secondPlaceKillsCount,
+                    secondPlaceKillsPoints,
+                    thirdPlaceName, thirdPlacePoints, thirdPlacePlayersCount, thirdPlaceKillsCount,
+                    thirdPlaceKillsPoints,
+                    duration,
+                    killer.getName(), killerKillsCount,
+                    gameLogger != null ? gameLogger.getLogFile() : null);
+
+            if (gameLogger != null) {
+                gameLogger.logLine("==== CLASSIFICACAO FINAL ====");
+
+                int killPoints = getConfig().getLeaguePointsKill();
+                int earlyBonus = getConfig().getEarlyKillPointsBonus();
+
+                int winnerEarlyKills = getGroupEarlyKills(winnerGroup, winners);
+                int winnerDMKills = winnerKillsCount - winnerEarlyKills;
+                gameLogger.logLine("🏆 1º LUGAR: " + winnerName + " (" + winnerPoints + " pts)");
+                gameLogger.logLine("   | Participantes: " + winnerPlayersCount);
+                gameLogger.logLine("   | Kills antes Deathmatch: " + winnerEarlyKills + " ("
+                        + (winnerEarlyKills * (killPoints + earlyBonus)) + " pts)");
+                gameLogger.logLine("   | Kills depois Deathmatch: " + winnerDMKills + " ("
+                        + (winnerDMKills * killPoints) + " pts)");
+                gameLogger.logLine("   | Kills Totais: " + winnerKillsCount + " ("
+                        + ((winnerEarlyKills * (killPoints + earlyBonus)) + (winnerDMKills * killPoints)) + " pts)");
+
+                int secondEarlyKills = getGroupEarlyKills(secondPlaceGroup, secondPlaceWinners);
+                int secondDMKills = secondPlaceKillsCount - secondEarlyKills;
+                gameLogger.logLine("🥈 2º LUGAR: " + secondPlaceName + " (" + secondPlacePoints + " pts)");
+                gameLogger.logLine("   | Participantes: " + secondPlacePlayersCount);
+                gameLogger.logLine("   | Kills antes Deathmatch: " + secondEarlyKills + " ("
+                        + (secondEarlyKills * (killPoints + earlyBonus)) + " pts)");
+                gameLogger.logLine("   | Kills depois Deathmatch: " + secondDMKills + " ("
+                        + (secondDMKills * killPoints) + " pts)");
+                gameLogger.logLine("   | Kills Totais: " + secondPlaceKillsCount + " ("
+                        + ((secondEarlyKills * (killPoints + earlyBonus)) + (secondDMKills * killPoints)) + " pts)");
+
+                int thirdEarlyKills = getGroupEarlyKills(thirdPlaceGroup, thirdPlaceWinners);
+                int thirdDMKills = thirdPlaceKillsCount - thirdEarlyKills;
+                gameLogger.logLine("🥉 3º LUGAR: " + thirdPlaceName + " (" + thirdPlacePoints + " pts)");
+                gameLogger.logLine("   | Participantes: " + thirdPlacePlayersCount);
+                gameLogger.logLine("   | Kills antes Deathmatch: " + thirdEarlyKills + " ("
+                        + (thirdEarlyKills * (killPoints + earlyBonus)) + " pts)");
+                gameLogger.logLine(
+                        "   | Kills depois Deathmatch: " + thirdDMKills + " (" + (thirdDMKills * killPoints) + " pts)");
+                gameLogger.logLine("   | Kills Totais: " + thirdPlaceKillsCount + " ("
+                        + ((thirdEarlyKills * (killPoints + earlyBonus)) + (thirdDMKills * killPoints)) + " pts)");
+
+                gameLogger.logLine("==================================");
+                gameLogger.logLine("⭐ MVP (Mais Abates): " + (killer != null ? killer.getName() : "N/A") + " com "
+                        + killerKillsCount + " eliminações");
+                gameLogger.logLine("⏱️ Tempo de Evento: " + duration + " minutos");
+
+                gameLogger.logLine("==== Outros Participantes ====");
+                List<Group> allGroups = getParticipants().stream()
+                        .map(this::getGroup)
+                        .filter(java.util.Objects::nonNull)
+                        .distinct()
+                        .collect(Collectors.toList());
+
+                for (Group g : allGroups) {
+                    if (g.equals(winnerGroup) || g.equals(secondPlaceGroup) || g.equals(thirdPlaceGroup))
+                        continue;
+                    List<Warrior> groupWarriors = getParticipants().stream().filter(w -> g.isMember(w.getUniqueId()))
+                            .collect(Collectors.toList());
+                    int gTotalKills = getGroupKills(g, groupWarriors);
+                    int gEarlyKills = getGroupEarlyKills(g, groupWarriors);
+                    int gDMKills = gTotalKills - gEarlyKills;
+                    gameLogger.logLine("🔸 " + g.getName());
+                    gameLogger.logLine("   | Participantes: " + groupWarriors.size());
+                    gameLogger.logLine("   | Kills antes Deathmatch: " + gEarlyKills + " ("
+                            + (gEarlyKills * (killPoints + earlyBonus)) + " pts)");
+                    gameLogger.logLine(
+                            "   | Kills depois Deathmatch: " + gDMKills + " (" + (gDMKills * killPoints) + " pts)");
+                    gameLogger.logLine("   | Kills Totais: " + gTotalKills + " ("
+                            + ((gEarlyKills * (killPoints + earlyBonus)) + (gDMKills * killPoints)) + " pts)");
+                }
+
+                gameLogger.logLine("==================================");
+                gameLogger.logLine("==== RELATÓRIO DE DANO ====");
+
+                List<Map.Entry<Warrior, Double>> dmgList = new ArrayList<>(getDamageDealtMap().entrySet());
+                dmgList.sort((a, b) -> b.getValue().compareTo(a.getValue()));
+
+                for (Map.Entry<Warrior, Double> entry : dmgList) {
+                    Warrior w = entry.getKey();
+                    int kills = killsCount.getOrDefault(w, 0);
+                    gameLogger.logLine("⚔️ " + w.getName() + " -> Dano Causado: "
+                            + String.format(Locale.US, "%.2f", entry.getValue()) + " | Eliminações: " + kills);
+                }
+            }
             discordAnnounce("discord_who_won_freeforall_podium",
-                winnerName, winnerPoints, winnerPlayersCount, winnerKillsCount, winnerKillsPoints,
-                secondPlaceName, secondPlacePoints, secondPlacePlayersCount, secondPlaceKillsCount, secondPlaceKillsPoints,
-                thirdPlaceName, thirdPlacePoints, thirdPlacePlayersCount, thirdPlaceKillsCount, thirdPlaceKillsPoints,
-                duration,
-                killer.getName(), killerKillsCount
-            );
+                    winnerName, winnerPoints, winnerPlayersCount, winnerKillsCount, winnerKillsPoints,
+                    secondPlaceName, secondPlacePoints, secondPlacePlayersCount, secondPlaceKillsCount,
+                    secondPlaceKillsPoints,
+                    thirdPlaceName, thirdPlacePoints, thirdPlacePlayersCount, thirdPlaceKillsCount,
+                    thirdPlaceKillsPoints,
+                    duration,
+                    killer.getName(), killerKillsCount);
         } else {
             int totalKills = getWinnerGroupTotalKills();
             int totalPlayers = getWinnerGroupTotalPlayers();
             broadcastKey("who_won", winnerName, totalKills, totalPlayers, duration);
             discordAnnounce("discord_who_won", winnerName);
         }
-        
+
         winners.forEach(w -> w.increaseVictories(gameName));
         givePrizes(FIRST, winnerGroup, winners);
         givePrizes(SECOND, secondPlaceGroup, secondPlaceWinners);
         givePrizes(THIRD, thirdPlaceGroup, thirdPlaceWinners);
         // Schedule sync command after 5 seconds
-        Bukkit.getScheduler().runTaskLater(plugin, () ->
-            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "sync all uclan reload addons"), 100L);
+        Bukkit.getScheduler().runTaskLater(plugin,
+                () -> Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "sync all uclan reload addons"),
+                100L);
 
         // League points integration
         GameConfiguration config = getConfig();
@@ -388,31 +497,56 @@ public class FreeForAllGame extends Game {
         if (awardAllPrizes) {
             if (winnerGroup != null && config.getLeaguePointsFirst() > 0) {
                 Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
-                    String.format("clanleague addevent %s %d %s", winnerGroup.getName(), config.getLeaguePointsFirst(), "1º Lugar - " + eventName));
+                        String.format("clanleague addevent %s %d %s", winnerGroup.getName(),
+                                config.getLeaguePointsFirst(), "1º Lugar - " + eventName));
             }
             if (secondPlaceGroup != null && config.getLeaguePointsSecond() > 0) {
                 Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
-                    String.format("clanleague addevent %s %d %s", secondPlaceGroup.getName(), config.getLeaguePointsSecond(), "2º Lugar - " + eventName));
+                        String.format("clanleague addevent %s %d %s", secondPlaceGroup.getName(),
+                                config.getLeaguePointsSecond(), "2º Lugar - " + eventName));
             }
             if (thirdPlaceGroup != null && config.getLeaguePointsThird() > 0) {
                 Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
-                    String.format("clanleague addevent %s %d %s", thirdPlaceGroup.getName(), config.getLeaguePointsThird(), "3º Lugar - " + eventName));
+                        String.format("clanleague addevent %s %d %s", thirdPlaceGroup.getName(),
+                                config.getLeaguePointsThird(), "3º Lugar - " + eventName));
             }
         }
-        
+
         // Award kill points to all participants who got kills
         int killPoints = config.getLeaguePointsKill();
-        if (killPoints > 0) {
+        int earlyBonus = config.getEarlyKillPointsBonus();
+        if (killPoints > 0 || earlyBonus > 0) {
             for (Map.Entry<Warrior, Integer> entry : getKillsCount().entrySet()) {
-                Warrior killer = entry.getKey();
+                Warrior killerPlayer = entry.getKey();
                 int kills = entry.getValue();
                 if (kills > 0) {
-                    Group killerGroup = getGroup(killer);
+                    Group killerGroup = getGroup(killerPlayer);
                     if (killerGroup != null) {
-                        int totalPoints = killPoints * kills;
+                        int earlyKills = earlyKillsCount.getOrDefault(killerPlayer, 0);
+                        int totalPoints = (killPoints * kills) + (earlyBonus * earlyKills);
+
+                        String reason = "Kills (" + kills + "x)";
+                        if (earlyKills > 0) {
+                            reason += " + Early Game Bonus (" + earlyKills + "x)";
+                        }
+                        reason += " - " + eventName;
+
                         Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
-                            String.format("clanleague addevent %s %d %s", killerGroup.getName(), totalPoints, 
-                                "Kills (" + kills + "x) - " + eventName));
+                                String.format("clanleague addevent %s %d %s", killerGroup.getName(), totalPoints,
+                                        reason));
+
+                        if (gameLogger != null) {
+                            int dmKills = kills - earlyKills;
+                            String logMsg = String.format("%d Eliminações [%d na Fase Inicial (+%d pts)", kills,
+                                    earlyKills,
+                                    earlyKills * earlyBonus);
+                            if (dmKills > 0) {
+                                logMsg += String.format(" e %d no DM", dmKills);
+                            }
+                            logMsg += "]";
+                            gameLogger.logLine("📊 Pontuação: " + killerPlayer.getName() + " (Clã "
+                                    + killerGroup.getName() + ") gerou " + totalPoints + " pts -> " + logMsg);
+                        }
                     }
                 }
             }
@@ -429,7 +563,8 @@ public class FreeForAllGame extends Game {
         if (getConfig().isGroupMode()) {
             winnerGroup = getGroup(warrior);
             if (winnerGroup != null) {
-                winners = getParticipants().stream().filter(p -> winnerGroup.isMember(p.getUniqueId())).collect(Collectors.toList());
+                winners = getParticipants().stream().filter(p -> winnerGroup.isMember(p.getUniqueId()))
+                        .collect(Collectors.toList());
             } else {
                 winners.add(warrior);
             }
@@ -514,6 +649,16 @@ public class FreeForAllGame extends Game {
                 .count();
     }
 
+    private int getGroupEarlyKills(@Nullable Group group, @Nullable List<Warrior> warriors) {
+        if (group == null || warriors == null) {
+            return 0;
+        }
+        return earlyKillsCount.entrySet().stream()
+                .filter(entry -> group.isMember(entry.getKey().getUniqueId()))
+                .mapToInt(Map.Entry::getValue)
+                .sum();
+    }
+
     private int getGroupKills(@Nullable Group group, @Nullable List<Warrior> warriors) {
         if (group == null || warriors == null) {
             return 0;
@@ -533,18 +678,19 @@ public class FreeForAllGame extends Game {
         cancelDeathmatchTask();
         clearDeathmatchEffects();
         deathmatchStarted = false;
+
+        if (deathmatchBossBar != null) {
+            deathmatchBossBar.removeAll();
+            deathmatchBossBar = null;
+        }
+        earlyKillsCount.clear();
+
         super.finish(cancelled);
     }
 
     private void scheduleDeathmatch() {
         Integer minutes = getConfig().getDeathmatchAfterMinutes();
         if (minutes == null || minutes <= 0) {
-            return;
-        }
-
-        Map<Integer, Location> entrances = getConfig().getDeathmatchEntrances();
-        if (entrances.isEmpty()) {
-            plugin.debug("Deathmatch entrances not configured; skipping deathmatch phase.");
             return;
         }
 
@@ -564,42 +710,22 @@ public class FreeForAllGame extends Game {
             return;
         }
 
-        teleportToDeathmatch(targets);
         applyDeathmatchEffects(targets);
-        broadcast("Deathmatch has begun! Remaining players have been moved to the deathmatch arena.");
-    }
 
-    private void teleportToDeathmatch(@NotNull List<Warrior> warriors) {
-        List<Location> entrances = new ArrayList<>(getConfig().getDeathmatchEntrances().values());
-        if (entrances.isEmpty()) {
-            return;
-        }
-
-        ThreadLocalRandom random = ThreadLocalRandom.current();
-
-        if (getConfig().isGroupMode()) {
-            Map<Group, List<Warrior>> groupToWarriors = new HashMap<>();
-            for (Warrior warrior : warriors) {
-                Group group = getGroup(warrior);
-                if (group == null) {
-                    continue;
+        String title = getConfig().getDeathmatchBossbarTitle();
+        if (title != null && !title.isEmpty()) {
+            deathmatchBossBar = Bukkit.createBossBar(
+                    ChatColor.translateAlternateColorCodes('&', title),
+                    BarColor.RED,
+                    BarStyle.SOLID);
+            for (Warrior warrior : targets) {
+                Player p = warrior.toOnlinePlayer();
+                if (p != null) {
+                    deathmatchBossBar.addPlayer(p);
                 }
-                groupToWarriors.computeIfAbsent(group, k -> new ArrayList<>()).add(warrior);
-            }
-
-            for (List<Warrior> groupWarriors : groupToWarriors.values()) {
-                if (groupWarriors.isEmpty()) {
-                    continue;
-                }
-                Location entrance = entrances.get(random.nextInt(entrances.size()));
-                teleport(groupWarriors, entrance);
-            }
-        } else {
-            for (Warrior warrior : warriors) {
-                Location entrance = entrances.get(random.nextInt(entrances.size()));
-                teleport(warrior, entrance);
             }
         }
+        broadcastKey("deathmatch_started", title != null ? title : "&c&lDEATHMATCH INICIOU!");
     }
 
     private void applyDeathmatchEffects(@NotNull Collection<Warrior> warriors) {
@@ -609,7 +735,8 @@ public class FreeForAllGame extends Game {
                 continue;
             }
             player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, 1, false, true));
-            player.addPotionEffect(new PotionEffect(PotionEffectType.INCREASE_DAMAGE, Integer.MAX_VALUE, 1, false, true));
+            player.addPotionEffect(
+                    new PotionEffect(PotionEffectType.INCREASE_DAMAGE, Integer.MAX_VALUE, 1, false, true));
         }
     }
 

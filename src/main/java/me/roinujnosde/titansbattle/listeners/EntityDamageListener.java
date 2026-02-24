@@ -26,13 +26,15 @@ public class EntityDamageListener extends TBListener {
     public void onDamageLowest(EntityDamageEvent event) {
         boolean disableFfMessages = plugin.getConfig().getBoolean("disable-ff-messages", true);
         if (disableFfMessages && isParticipant(event.getEntity())) {
-            // Cancelling so other plugins don't display messages such as "can't hit an ally" during the game
+            // Cancelling so other plugins don't display messages such as "can't hit an
+            // ally" during the game
             event.setCancelled(true);
         }
     }
 
-    //mcMMO's listener is on HIGHEST and ignoreCancelled = true, this will run before
-    //Aurellium / Auraskills is on HIGH
+    // mcMMO's listener is on HIGHEST and ignoreCancelled = true, this will run
+    // before
+    // Aurellium / Auraskills is on HIGH
     @EventHandler(priority = EventPriority.NORMAL)
     public void onDamage(EntityDamageEvent event) {
         DatabaseManager dm = plugin.getDatabaseManager();
@@ -56,6 +58,27 @@ public class EntityDamageListener extends TBListener {
         }
     }
 
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onDamageMonitor(EntityDamageEvent event) {
+        if (!(event.getEntity() instanceof Player)) {
+            return;
+        }
+        if (event instanceof EntityDamageByEntityEvent) {
+            EntityDamageByEntityEvent subEvent = (EntityDamageByEntityEvent) event;
+            Player attacker = Helper.getPlayerAttackerOrKiller(subEvent.getDamager());
+            if (attacker != null) {
+                Player defender = (Player) event.getEntity();
+                BaseGame game = plugin.getBaseGameFrom(defender);
+                if (game != null) {
+                    Warrior attackerWarrior = plugin.getDatabaseManager().getWarrior(attacker);
+                    if (game.isInBattle(attackerWarrior) && isDamageTypeAllowed(subEvent, game)) {
+                        game.addDamageDealt(attackerWarrior, subEvent.getFinalDamage());
+                    }
+                }
+            }
+        }
+    }
+
     private void processEntityDamageByEntityEvent(EntityDamageEvent event, Player defender, BaseGame game) {
         DatabaseManager dm = plugin.getDatabaseManager();
 
@@ -66,11 +89,14 @@ public class EntityDamageListener extends TBListener {
             return;
         }
         if (attacker != null) {
-            Warrior warrior = dm.getWarrior(attacker);
-            if (!game.getConfig().isPvP() || !game.isInBattle(warrior)) {
+            Warrior attackerWarrior = dm.getWarrior(attacker);
+            Warrior defenderWarrior = dm.getWarrior(defender);
+            if (!game.getConfig().isPvP() || !game.isInBattle(attackerWarrior)) {
                 event.setCancelled(true);
                 return;
             }
+            game.updateCombatTime(attackerWarrior);
+            game.updateCombatTime(defenderWarrior);
         }
         if (attacker == null || !game.getConfig().isGroupMode()) {
             return;

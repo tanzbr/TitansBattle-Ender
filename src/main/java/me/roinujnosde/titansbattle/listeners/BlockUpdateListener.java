@@ -32,6 +32,9 @@ public class BlockUpdateListener extends TBListener {
         if (game == null) {
             return;
         }
+        if (game.getConfig().isAllowBlockInteraction()) {
+            return;
+        }
 
         Warrior warrior = plugin.getDatabaseManager().getWarrior(player);
         if (!game.isInBattle(warrior)) {

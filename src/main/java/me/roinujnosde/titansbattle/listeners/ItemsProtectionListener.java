@@ -8,6 +8,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.CraftingInventory;
@@ -21,6 +22,14 @@ public class ItemsProtectionListener extends TBListener {
 
     public ItemsProtectionListener(@NotNull TitansBattle plugin) {
         super(plugin);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void on(PlayerDropItemEvent event) {
+        me.roinujnosde.titansbattle.BaseGame game = plugin.getBaseGameFrom(event.getPlayer());
+        if (game != null && game.isLobby()) {
+            event.setCancelled(true);
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -52,7 +61,7 @@ public class ItemsProtectionListener extends TBListener {
             if (Kit.isKitItem(item)) {
                 plugin.debug(format("Removing kit item from %s's inventory", player.getName()));
                 inventory.remove(item);
-                item.setAmount(0); //needed for some Minecraft versions
+                item.setAmount(0); // needed for some Minecraft versions
             }
         }
     }

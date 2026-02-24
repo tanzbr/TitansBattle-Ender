@@ -64,6 +64,8 @@ public abstract class BaseGameConfiguration implements ConfigurationSerializable
     protected Map<Integer, Location> deathmatchEntrances = new HashMap<>();
     @Path("destination.border_center")
     protected Location borderCenter;
+    @Path("teleport.to_arena_entrances")
+    protected Boolean teleportToArenaEntrances = true;
 
     @Path("time.preparation")
     protected Integer preparationTime = 30;
@@ -71,7 +73,19 @@ public abstract class BaseGameConfiguration implements ConfigurationSerializable
     protected Integer expirationTime = 3600;
     @Path("time.deathmatch_after_minutes")
     protected Integer deathmatchAfterMinutes = 0;
+    @Path("bossbar.deathmatch_title")
+    protected String deathmatchBossbarTitle = "&c&lDEATHMATCH!";
+    @Path("allow_block_interaction")
+    protected Boolean allowBlockInteraction = false;
+    @Path("points.early_kill_bonus")
+    protected Integer earlyKillPointsBonus = 1;
+    @Path("combat.anti_camp.enabled")
+    protected Boolean antiCampEnabled = false;
+    @Path("combat.anti_camp.minutes_inactive")
+    protected Integer antiCampMinutesInactive = 3;
 
+    @Path("run_commands.on_start")
+    protected @Nullable List<String> commandsOnStart;
     @Path("run_commands.before_battle")
     protected @Nullable List<String> commandsBeforeBattle;
     @Path("run_commands.after_battle")
@@ -253,12 +267,40 @@ public abstract class BaseGameConfiguration implements ConfigurationSerializable
         return deathmatchAfterMinutes;
     }
 
+    public Integer getEarlyKillPointsBonus() {
+        return earlyKillPointsBonus;
+    }
+
+    public Boolean isAntiCampEnabled() {
+        return antiCampEnabled;
+    }
+
+    public Integer getAntiCampMinutesInactive() {
+        return antiCampMinutesInactive;
+    }
+
+    public String getDeathmatchBossbarTitle() {
+        return deathmatchBossbarTitle;
+    }
+
+    public Boolean isTeleportToArenaEntrances() {
+        return teleportToArenaEntrances;
+    }
+
+    public @Nullable List<String> getCommandsOnStart() {
+        return commandsOnStart;
+    }
+
     public @Nullable List<String> getCommandsBeforeBattle() {
         return commandsBeforeBattle;
     }
 
     public @Nullable List<String> getCommandsAfterBattle() {
         return commandsAfterBattle;
+    }
+
+    public Boolean isAllowBlockInteraction() {
+        return allowBlockInteraction;
     }
 
     public Boolean isWorldBorder() {

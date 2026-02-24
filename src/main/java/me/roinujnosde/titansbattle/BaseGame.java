@@ -13,6 +13,7 @@ import me.roinujnosde.titansbattle.types.Kit;
 import me.roinujnosde.titansbattle.types.Warrior;
 import me.roinujnosde.titansbattle.utils.MessageUtils;
 import me.roinujnosde.titansbattle.utils.SoundUtils;
+import me.roinujnosde.titansbattle.utils.GameLogger;
 import org.bukkit.*;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
@@ -53,9 +54,14 @@ public abstract class BaseGame {
     protected final HashMap<Warrior, Integer> killsCount = new HashMap<>();
     protected final Set<Warrior> casualties = new HashSet<>();
     protected final Set<Warrior> casualtiesWatching = new HashSet<>();
+    protected final Map<Warrior, Long> lastCombatTime = new HashMap<>();
+    protected final Set<Warrior> loggedCampers = new HashSet<>();
+    protected final HashMap<Warrior, Double> damageDealt = new HashMap<>();
 
     private final List<BukkitTask> tasks = new ArrayList<>();
     private LobbyAnnouncementTask lobbyTask;
+
+    protected GameLogger gameLogger;
 
     public BaseGame(TitansBattle plugin, BaseGameConfiguration config) {
         this.plugin = plugin;
@@ -84,21 +90,48 @@ public abstract class BaseGame {
         Integer interval = getConfig().getAnnouncementStartingInterval();
         lobbyTask = new LobbyAnnouncementTask(getConfig().getAnnouncementStartingTimes(), interval);
 
+        gameLogger = new GameLogger(getConfig().getName(), plugin);
+        gameLogger.logLine("▶️ Lobby iniciado, aguardando jogadores...");
+
         // Control holograms for npcs
         Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh on glad_iniciando");
         Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh on iniciangoagora");
         Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh off eventoagora");
         Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh off eventonenhum");
 
+        // Execute on_start commands if configured
+        List<String> commandsOnStart = getConfig().getCommandsOnStart();
+        if (commandsOnStart != null && !commandsOnStart.isEmpty()) {
+            for (String command : commandsOnStart) {
+                CommandManager.dispatchCommand(Bukkit.getConsoleSender(), command);
+            }
+        }
+
         addTask(lobbyTask.runTaskTimer(plugin, 0, interval * 20));
+
+        if (getConfig().isWorldBorder()) {
+            WorldBorder worldBorder = getConfig().getBorderCenter().getWorld().getWorldBorder();
+            Location center = getConfig().getBorderCenter();
+            worldBorder.setCenter(center.getBlockX() + 0.5, center.getBlockZ() + 0.5);
+
+            int initialSize = getConfig().getBorderInitialSize();
+            if (initialSize % 2 == 0)
+                initialSize++;
+
+            worldBorder.setSize(initialSize);
+            worldBorder.setDamageAmount(getConfig().getBorderDamage());
+            worldBorder.setDamageBuffer(0);
+        }
     }
 
     public void finish(boolean cancelled) {
         finish(cancelled, false);
     }
-    
+
     public void finish(boolean cancelled, boolean awardKillPoints) {
-        // Control holograms for npcs   
+        lastCombatTime.clear();
+        loggedCampers.clear();
+        // Control holograms for npcs
         Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh off glad_iniciando");
         Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh off iniciangoagora");
         Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh on eventonenhum");
@@ -122,6 +155,10 @@ public abstract class BaseGame {
         } else if (awardKillPoints) {
             processWinners(false);
         }
+
+        if (gameLogger != null) {
+            gameLogger.close();
+        }
     }
 
     public abstract void setWinner(@NotNull Warrior warrior) throws CommandNotSupportedException;
@@ -129,7 +166,7 @@ public abstract class BaseGame {
     public void cancel(@NotNull CommandSender sender) {
         cancel(sender, false);
     }
-    
+
     public void cancel(@NotNull CommandSender sender, boolean awardKillPoints) {
         this.cancelled = true;
         broadcastKey("cancelled", sender.getName());
@@ -154,10 +191,15 @@ public abstract class BaseGame {
         SoundUtils.playSound(JOIN_GAME, plugin.getConfig(), player);
         participants.add(warrior);
         groups.put(warrior, warrior.getGroup());
+        lastCombatTime.put(warrior, System.currentTimeMillis());
         setKit(warrior);
         healAndClearEffects(warrior);
         broadcastKey("player_joined", warrior.getName());
         player.sendMessage(getLang("objective"));
+
+        if (gameLogger != null) {
+            gameLogger.logLine("[+] " + warrior.getName() + " entrou no evento.");
+        }
 
         // Set player in survival mode and clear inventory
         player.setGameMode(GameMode.SURVIVAL);
@@ -191,13 +233,22 @@ public abstract class BaseGame {
                     if (points > 0) {
                         Group killerGroup = getGroup(killer);
                         if (killerGroup != null) {
-                            killer.sendMessage("&aSeu clan receberá &f" + points + " pontos &apela sua kill ao final do evento!");
+                            killer.sendMessage(
+                                    "&aSeu clan receberá &f" + points + " pontos &apela sua kill ao final do evento!");
                         }
                     }
                 }
             }
             victim.increaseDeaths(gameName);
             playDeathSound(victim);
+
+            if (gameLogger != null) {
+                String killerStr = killer != null
+                        ? killer.getName() + "(" + killsCount.getOrDefault(killer, 0) + " kills)"
+                        : "Si mesmo / Natureza";
+                String victimStr = victim.getName() + "(" + killsCount.getOrDefault(victim, 0) + " kills)";
+                gameLogger.logLine("⚔️ " + killerStr + " eliminou " + victimStr);
+            }
         }
         broadcastDeathMessage(victim, killer);
         processPlayerExit(victim);
@@ -206,6 +257,18 @@ public abstract class BaseGame {
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     public boolean isLobby() {
         return lobby;
+    }
+
+    public void addDamageDealt(Warrior warrior, double damage) {
+        damageDealt.put(warrior, damageDealt.getOrDefault(warrior, 0.0) + damage);
+    }
+
+    public double getDamageDealt(Warrior warrior) {
+        return damageDealt.getOrDefault(warrior, 0.0);
+    }
+
+    public Map<Warrior, Double> getDamageDealtMap() {
+        return damageDealt;
     }
 
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
@@ -227,8 +290,8 @@ public abstract class BaseGame {
             plugin.getConfigManager().getClearInventory().add(warrior.getUniqueId());
         }
         if (!isLobby() && getCurrentFighters().contains(warrior)) {
-            //processInventoryOnExit(warrior);
-            //onDeath(warrior, getLastAttacker(warrior));
+            // processInventoryOnExit(warrior);
+            // onDeath(warrior, getLastAttacker(warrior));
             Player player = warrior.toOnlinePlayer();
             if (player != null) {
                 player.setHealth(0);
@@ -236,7 +299,7 @@ public abstract class BaseGame {
             return;
         }
         casualties.add(warrior);
-        casualtiesWatching.add(warrior); //adding to this Collection, so they are not teleported on respawn
+        casualtiesWatching.add(warrior); // adding to this Collection, so they are not teleported on respawn
         plugin.getConfigManager().getRespawn().add(warrior.getUniqueId());
         plugin.getConfigManager().save();
         processPlayerExit(warrior);
@@ -251,14 +314,18 @@ public abstract class BaseGame {
         }
         Player player = Objects.requireNonNull(warrior.toOnlinePlayer());
         if (!isLobby() && getCurrentFighters().contains(warrior)) {
-            //processInventoryOnExit(warrior);
-            //onDeath(warrior, getLastAttacker(warrior));
+            // processInventoryOnExit(warrior);
+            // onDeath(warrior, getLastAttacker(warrior));
             player.setHealth(0);
             return;
         }
         player.sendMessage(getLang("you-have-left"));
         SoundUtils.playSound(LEAVE_GAME, plugin.getConfig(), player);
         processPlayerExit(warrior);
+
+        if (gameLogger != null) {
+            gameLogger.logLine("[-] " + warrior.getName() + " saiu do evento.");
+        }
     }
 
     protected @Nullable Warrior getLastAttacker(@NotNull Warrior victim) {
@@ -290,7 +357,8 @@ public abstract class BaseGame {
             return;
         }
         for (ItemStack item : player.getInventory().getContents()) {
-            if (item == null) continue;
+            if (item == null)
+                continue;
             world.dropItemNaturally(player.getLocation(), item.clone());
         }
         Kit.clearInventory(player);
@@ -357,10 +425,10 @@ public abstract class BaseGame {
         if (message.startsWith("!!broadcast")) {
             // Remove !!broadcast prefix
             String cleanMessage = message.replace("!!broadcast", "").trim();
-            
+
             // Convert \n to ;; for pbc command
             String pbcMessage = cleanMessage.replace("\n", ";;");
-            
+
             // Sync message to all gamemodes, except lobby and events
             Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "pbc msg all-gamemodes " + pbcMessage);
 
@@ -378,7 +446,8 @@ public abstract class BaseGame {
 
     protected void healAndClearEffects(@NotNull Warrior warrior) {
         Player player = warrior.toOnlinePlayer();
-        if (player == null) return;
+        if (player == null)
+            return;
 
         player.setHealth(player.getMaxHealth());
         player.setFoodLevel(20);
@@ -483,12 +552,12 @@ public abstract class BaseGame {
         return true;
     }
 
-    @SuppressWarnings({"BooleanMethodIsAlwaysInverted"})
+    @SuppressWarnings({ "BooleanMethodIsAlwaysInverted" })
     protected boolean canJoin(@NotNull Warrior warrior) {
         Player player = warrior.toOnlinePlayer();
         if (player == null) {
             plugin.getLogger().log(Level.WARNING, "Joining player {0} ({1}) is null",
-                    new Object[]{warrior.getName(), warrior.getUniqueId()});
+                    new Object[] { warrior.getName(), warrior.getUniqueId() });
             return false;
         }
 
@@ -514,7 +583,7 @@ public abstract class BaseGame {
         if (!isLobby() && !cancelled) {
             runCommandsAfterBattle(Collections.singletonList(warrior));
             processRemainingPlayers(warrior);
-            //last participant
+            // last participant
             if (getConfig().isGroupMode() && group != null && !getGroupParticipants().containsKey(group)) {
                 // Only broadcast if more than one group remains after this group is eliminated
                 if (getGroupParticipants().size() > 1) {
@@ -569,7 +638,8 @@ public abstract class BaseGame {
             if (Math.min(remainingPlayers, remainingGroups) <= 0) {
                 return;
             }
-            MessageUtils.sendActionBar(p, MessageFormat.format(getLang("action-bar-remaining-opponents"), remainingPlayers, remainingGroups));
+            MessageUtils.sendActionBar(p,
+                    MessageFormat.format(getLang("action-bar-remaining-opponents"), remainingPlayers, remainingGroups));
         });
     }
 
@@ -599,7 +669,8 @@ public abstract class BaseGame {
     }
 
     protected void runCommands(@NotNull Collection<Warrior> warriors, @Nullable Collection<String> commands) {
-        if (commands == null) return;
+        if (commands == null)
+            return;
         PlaceholderHook hook = plugin.getPlaceholderHook();
 
         for (String command : commands) {
@@ -609,7 +680,8 @@ public abstract class BaseGame {
                     continue;
                 }
                 if (!command.contains("%player%")) { // Runs the command once when %player% is not used
-                    CommandManager.dispatchCommand(Bukkit.getConsoleSender(), hook.parse((OfflinePlayer) null, command));
+                    CommandManager.dispatchCommand(Bukkit.getConsoleSender(),
+                            hook.parse((OfflinePlayer) null, command));
                     break;
                 }
                 CommandManager.dispatchCommand(Bukkit.getConsoleSender(), hook.parse(warrior, command,
@@ -627,6 +699,10 @@ public abstract class BaseGame {
     }
 
     protected void teleportToArena(List<Warrior> warriors) {
+        if (!getConfig().isTeleportToArenaEntrances()) {
+            return;
+        }
+
         List<Location> arenaEntrances = new ArrayList<>(getConfig().getArenaEntrances().values());
         if (arenaEntrances.isEmpty()) {
             return;
@@ -643,7 +719,8 @@ public abstract class BaseGame {
             Map<Group, List<Warrior>> groupToWarriors = new LinkedHashMap<>();
             for (Warrior warrior : warriors) {
                 Group group = getGroup(warrior);
-                if (group == null) continue;
+                if (group == null)
+                    continue;
                 groupToWarriors.computeIfAbsent(group, k -> new ArrayList<>()).add(warrior);
             }
 
@@ -676,7 +753,8 @@ public abstract class BaseGame {
                     weaponName = itemInHand.getType().name().replace("_", " ").toLowerCase();
                 }
             }
-            broadcastKey("killed_by", victim.getName(), killsCount.getOrDefault(victim, 0), killer.getName(), killsCount.get(killer), weaponName);
+            broadcastKey("killed_by", victim.getName(), killsCount.getOrDefault(victim, 0), killer.getName(),
+                    killsCount.get(killer), weaponName);
         }
     }
 
@@ -691,7 +769,8 @@ public abstract class BaseGame {
         Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "npc spawn");
 
         addTask(new PreparationTimeTask().runTaskLater(plugin, getConfig().getPreparationTime() * 20));
-        addTask(new CountdownTitleTask(getCurrentFighters(), getConfig().getPreparationTime()).runTaskTimer(plugin, 0L, 20L));
+        addTask(new CountdownTitleTask(getCurrentFighters(), getConfig().getPreparationTime()).runTaskTimer(plugin, 0L,
+                20L));
     }
 
     public class LobbyAnnouncementTask extends BukkitRunnable {
@@ -714,8 +793,9 @@ public abstract class BaseGame {
                     lp2 = gc.getLeaguePointsSecond();
                     lp3 = gc.getLeaguePointsThird();
                 }
-                broadcastKey("starting_game", seconds, getConfig().getMinimumGroups(), getConfig().getMinimumPlayers(), getGroupParticipants().size(), getParticipants().size(),
-                    lp1, lp2, lp3);
+                broadcastKey("starting_game", seconds, getConfig().getMinimumGroups(), getConfig().getMinimumPlayers(),
+                        getGroupParticipants().size(), getParticipants().size(),
+                        lp1, lp2, lp3);
                 times--;
             } else {
                 processEnd();
@@ -742,26 +822,29 @@ public abstract class BaseGame {
 
         public BorderTask(WorldBorder worldBorder) {
             this.worldBorder = worldBorder;
-            currentSize = getConfig().getBorderInitialSize();
-            worldBorder.setCenter(getConfig().getBorderCenter());
-            worldBorder.setSize(currentSize);
-            worldBorder.setDamageAmount(getConfig().getBorderDamage());
-            worldBorder.setDamageBuffer(0);
+            this.currentSize = (int) worldBorder.getSize();
         }
 
         @Override
         @SuppressWarnings("deprecation")
         public void run() {
             int shrinkSize = getConfig().getBorderShrinkSize();
+            if (shrinkSize % 2 != 0)
+                shrinkSize++;
+
             int newSize = currentSize - shrinkSize;
 
-            if (getConfig().getBorderFinalSize() > newSize) {
+            int finalSize = getConfig().getBorderFinalSize();
+            if (finalSize % 2 == 0)
+                finalSize++;
+
+            if (finalSize > newSize) {
                 this.cancel();
-                shrinkSize = currentSize - getConfig().getBorderFinalSize();
+                shrinkSize = currentSize - finalSize;
                 if (shrinkSize <= 0) {
                     return;
                 }
-                newSize = getConfig().getBorderFinalSize();
+                newSize = finalSize;
             }
 
             getPlayerParticipantsStream().forEach(player -> {
@@ -786,7 +869,15 @@ public abstract class BaseGame {
             broadcastKey("preparation_over", clancount, minclans, playerscount, minplayers);
             runCommandsBeforeBattle(getCurrentFighters());
             battle = true;
-            
+
+            if (getConfig().isAntiCampEnabled() && getConfig().getAntiCampMinutesInactive() > 0) {
+                // Reset map before starting counting.
+                for (Warrior warrior : getCurrentFighters()) {
+                    lastCombatTime.put(warrior, System.currentTimeMillis());
+                }
+                addTask(new AntiCampTask().runTaskTimer(plugin, 600L, 600L));
+            }
+
             if (getConfig().isWorldBorder()) {
                 long borderInterval = getConfig().getBorderInterval() * 20L;
                 WorldBorder worldBorder = getConfig().getBorderCenter().getWorld().getWorldBorder();
@@ -811,7 +902,8 @@ public abstract class BaseGame {
         @SuppressWarnings("deprecation")
         @Override
         public void run() {
-            List<Player> players = warriors.stream().map(Warrior::toOnlinePlayer).filter(Objects::nonNull).collect(Collectors.toList());
+            List<Player> players = warriors.stream().map(Warrior::toOnlinePlayer).filter(Objects::nonNull)
+                    .collect(Collectors.toList());
             String title;
             if (timer > 0) {
                 title = getColor() + "" + timer;
@@ -845,4 +937,47 @@ public abstract class BaseGame {
             });
         }
     }
+
+    public class AntiCampTask extends BukkitRunnable {
+        @Override
+        public void run() {
+            if (!battle || cancelled || casualties.size() >= participants.size()) {
+                this.cancel();
+                return;
+            }
+            long maxIdleTime = getConfig().getAntiCampMinutesInactive() * 60000L;
+            long now = System.currentTimeMillis();
+            for (Warrior warrior : getCurrentFighters()) {
+                long lastTime = lastCombatTime.getOrDefault(warrior, now);
+                if (now - lastTime > maxIdleTime) {
+                    Player p = warrior.toOnlinePlayer();
+                    if (p != null) {
+                        try {
+                            p.addPotionEffect(new org.bukkit.potion.PotionEffect(
+                                    org.bukkit.potion.PotionEffectType.GLOWING, 200, 0));
+                        } catch (Error | Exception ignored) {
+                        } // PotionEffectType.GLOWING is 1.9+, fail silently
+                        p.sendMessage(
+                                "§cVocê está sendo revelado por ficar ausente do combate! Dê dano em alguém para remover o efeito.");
+                        if (gameLogger != null && !loggedCampers.contains(warrior)) {
+                            gameLogger.logLine("Tracker: " + warrior.getName() + " ficou inativo por "
+                                    + getConfig().getAntiCampMinutesInactive() + " min e sofreu revelação.");
+                            loggedCampers.add(warrior);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    public void updateCombatTime(@NotNull Warrior warrior) {
+        if (battle && isParticipant(warrior) && !casualties.contains(warrior)) {
+            lastCombatTime.put(warrior, System.currentTimeMillis());
+            Player player = warrior.toOnlinePlayer();
+            if (player != null && player.hasPotionEffect(org.bukkit.potion.PotionEffectType.GLOWING)) {
+                player.removePotionEffect(org.bukkit.potion.PotionEffectType.GLOWING);
+            }
+        }
+    }
+
 }

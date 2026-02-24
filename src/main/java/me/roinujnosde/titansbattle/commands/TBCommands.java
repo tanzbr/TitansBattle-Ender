@@ -102,7 +102,7 @@ public class TBCommands extends BaseCommand {
         sender.sendMessage(MessageFormat.format(plugin.getLang("has_been_kicked"), wName));
     }
 
-    @Subcommand("%readd|readd")
+    @Subcommand("re-add|re-add-player")
     @CommandPermission("titansbattle.kick")
     @Conditions("happening")
     @Description("{@@command.description.readd}")
