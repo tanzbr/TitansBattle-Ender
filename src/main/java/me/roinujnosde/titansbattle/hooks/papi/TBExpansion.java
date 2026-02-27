@@ -43,7 +43,8 @@ public class TBExpansion extends PlaceholderExpansion {
         LAST_WINNER_GROUP_PATTERN = Pattern.compile("last_winner_group_(?<game>\\S+)");
         LAST_WINNER_KILLER_PATTERN = Pattern.compile("last_(?<type>winner|killer)_(?<game>\\S+)");
         PREFIX_PATTERN = Pattern.compile("(?<game>^\\S+)_(?<type>winner|killer)_prefix");
-        PLACEHOLDERS = Arrays.asList("%titansbattle_groups_size%" ,"%titansbattle_participants_size%" ,"%titansbattle_arena_in_use_<arena>%", "%titansbattle_last_winner_group_<game>%",
+        PLACEHOLDERS = Arrays.asList("%titansbattle_groups_size%", "%titansbattle_participants_size%",
+                "%titansbattle_arena_in_use_<arena>%", "%titansbattle_last_winner_group_<game>%",
                 "%titansbattle_last_<killer|winner>_<game>%", "%titansbattle_<game>_<killer|winner>_prefix%",
                 "%titansbattle_group_total_victories%", "%titansbattle_total_kills%", "%titansbattle_total_deaths%");
     }
@@ -116,10 +117,18 @@ public class TBExpansion extends PlaceholderExpansion {
                     return "&c&lMINIGLAD ➜ &eSMP";
                 case "MiniGlad-Dima":
                     return "&c&lMINIGLAD ➜ &eDima";
+                case "MiniGlad-DimaSMP":
+                    return "&c&lMINIGLAD ➜ &eDimaSMP";
+                case "MiniGlad-Machadinha":
+                    return "&c&lMINIGLAD ➜ &eMachadinha";
+                case "MiniGlad-CPvP":
+                    return "&c&lMINIGLAD ➜ &eCrystal PvP";
                 case "Gladiador-Nethpot":
                     return "&4&lGLADIADOR ➜ &eNethpot";
                 case "Gladiador-SMP":
                     return "&4&lGLADIADOR ➜ &eSMP";
+                case "Gladiador-CPvP":
+                    return "&4&lGLADIADOR ➜ &eCrystal PvP";
                 default:
                     return "Nenhum";
             }
@@ -184,7 +193,8 @@ public class TBExpansion extends PlaceholderExpansion {
 
     @NotNull
     private String getWinnerPrefix(@NotNull OfflinePlayer player, @NotNull String game) {
-        Optional<GameConfiguration> config = plugin.getConfigurationDao().getConfiguration(game, GameConfiguration.class);
+        Optional<GameConfiguration> config = plugin.getConfigurationDao().getConfiguration(game,
+                GameConfiguration.class);
         if (!config.isPresent()) {
             plugin.debug(String.format("game %s not found", game));
             return "";
@@ -202,7 +212,8 @@ public class TBExpansion extends PlaceholderExpansion {
 
     @NotNull
     private String getKillerPrefix(@NotNull OfflinePlayer player, @NotNull String game) {
-        Optional<GameConfiguration> config = plugin.getConfigurationDao().getConfiguration(game, GameConfiguration.class);
+        Optional<GameConfiguration> config = plugin.getConfigurationDao().getConfiguration(game,
+                GameConfiguration.class);
         if (!config.isPresent()) {
             return "";
         }

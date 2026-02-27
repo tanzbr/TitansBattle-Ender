@@ -683,9 +683,9 @@ public class FreeForAllGame extends Game {
             deathmatchBossBar.removeAll();
             deathmatchBossBar = null;
         }
-        earlyKillsCount.clear();
 
         super.finish(cancelled);
+        earlyKillsCount.clear();
     }
 
     private void scheduleDeathmatch() {
