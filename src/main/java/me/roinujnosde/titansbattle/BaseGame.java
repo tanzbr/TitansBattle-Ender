@@ -593,13 +593,15 @@ public abstract class BaseGame {
         }
         participants.remove(warrior);
         Group group = getGroup(warrior);
-        groups.remove(warrior);
-        killsCount.remove(warrior);
-        casualties.remove(warrior);
-        casualtiesWatching.remove(warrior);
+        if (isLobby() || cancelled) {
+            groups.remove(warrior);
+            killsCount.remove(warrior);
+            casualties.remove(warrior);
+            casualtiesWatching.remove(warrior);
+            damageDealt.remove(warrior);
+        }
         lastCombatTime.remove(warrior);
         loggedCampers.remove(warrior);
-        damageDealt.remove(warrior);
         if (!isLobby() && !cancelled) {
             runCommandsAfterBattle(Collections.singletonList(warrior));
             processRemainingPlayers(warrior);

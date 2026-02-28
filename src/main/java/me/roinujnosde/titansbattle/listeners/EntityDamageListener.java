@@ -21,21 +21,13 @@ public class EntityDamageListener extends TBListener {
         super(plugin);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
-    public void onDamageLowest(EntityDamageEvent event) {
-        boolean disableFfMessages = plugin.getConfig().getBoolean("disable-ff-messages", true);
-        if (disableFfMessages && isParticipant(event.getEntity())) {
-            // Cancelling so other plugins don't display messages such as "can't hit an
-            // ally" during the game
-            event.setCancelled(true);
-        }
-    }
-
     // mcMMO's listener is on HIGHEST and ignoreCancelled = true, this will run
     // before
     // Aurellium / Auraskills is on HIGH
     @EventHandler(priority = EventPriority.NORMAL)
     public void onDamage(EntityDamageEvent event) {
+        if (event.isCancelled())
+            return;
         DatabaseManager dm = plugin.getDatabaseManager();
 
         if (!(event.getEntity() instanceof Player)) {
@@ -51,7 +43,6 @@ public class EntityDamageListener extends TBListener {
             event.setCancelled(true);
             return;
         }
-        event.setCancelled(false);
         Player attacker = null;
         if (event.getDamageSource().getCausingEntity() instanceof Player) {
             attacker = (Player) event.getDamageSource().getCausingEntity();
@@ -105,7 +96,7 @@ public class EntityDamageListener extends TBListener {
 
         GroupManager groupManager = TitansBattle.getInstance().getGroupManager();
         if (groupManager != null) {
-            if (defender.equals(attacker)) {
+            if (defender.getUniqueId().equals(attacker.getUniqueId())) {
                 return;
             }
             event.setCancelled(groupManager.sameGroup(defender.getUniqueId(), attacker.getUniqueId()));
@@ -119,13 +110,6 @@ public class EntityDamageListener extends TBListener {
         } else {
             return config.isMeleeDamage();
         }
-    }
-
-    private boolean isParticipant(Entity entity) {
-        if (entity instanceof Player) {
-            return plugin.getBaseGameFrom((Player) entity) != null;
-        }
-        return false;
     }
 
 }

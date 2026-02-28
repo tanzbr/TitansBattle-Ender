@@ -3,8 +3,9 @@ package me.roinujnosde.titansbattle.hooks.discord;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.entities.emoji.Emoji;
-import net.dv8tion.jda.api.interactions.components.buttons.Button;
 import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
 import net.dv8tion.jda.api.utils.FileUpload;
 
@@ -17,10 +18,12 @@ public class DiscordAnnounces {
 
         DiscordBot.eventChannel.sendMessage("<@&1455703005080060189>")
                 .addEmbeds(DiscordEmbeds.getStartingEmbed(name, minutes))
-                .addActionRow(
-                        Button.primary("events:addRole", Emoji.fromUnicode("\ud83d\udd14"))
-                                .withLabel("Receber notificações"),
-                        Button.secondary("events:removeRole", Emoji.fromUnicode("⛔")).withLabel("Deixar de receber"))
+                .addComponents(
+                        ActionRow.of(
+                                Button.primary("events:addRole", Emoji.fromUnicode("\ud83d\udd14"))
+                                        .withLabel("Receber notificações"),
+                                Button.secondary("events:removeRole", Emoji.fromUnicode("⛔"))
+                                        .withLabel("Deixar de receber")))
                 .queue();
     }
 
@@ -31,10 +34,12 @@ public class DiscordAnnounces {
 
         DiscordBot.eventChannel.sendMessage("<@&1455703005080060189>")
                 .addEmbeds(DiscordEmbeds.getStartedEmbed(name, clans, players))
-                .addActionRow(
-                        Button.primary("events:addRole", Emoji.fromUnicode("\ud83d\udd14"))
-                                .withLabel("Receber notificações"),
-                        Button.secondary("events:removeRole", Emoji.fromUnicode("⛔")).withLabel("Deixar de receber"))
+                .addComponents(
+                        ActionRow.of(
+                                Button.primary("events:addRole", Emoji.fromUnicode("\ud83d\udd14"))
+                                        .withLabel("Receber notificações"),
+                                Button.secondary("events:removeRole", Emoji.fromUnicode("⛔"))
+                                        .withLabel("Deixar de receber")))
                 .queue();
     }
 
@@ -54,19 +59,20 @@ public class DiscordAnnounces {
                         secondPlacePlayersCount, secondPlaceKillsCount, secondPlaceKillsPoints, thirdPlaceName,
                         thirdPlacePoints, thirdPlacePlayersCount, thirdPlaceKillsCount, thirdPlaceKillsPoints, duration,
                         killerName, killerKillsCount))
-                .addActionRow(
-                        Button.primary("events:addRole", Emoji.fromUnicode("\ud83d\udd14"))
-                                .withLabel("Receber notificações"),
-                        Button.secondary("events:removeRole", Emoji.fromUnicode("⛔")).withLabel("Deixar de receber"));
-
-        
+                .addComponents(
+                        ActionRow.of(
+                                Button.primary("events:addRole", Emoji.fromUnicode("\ud83d\udd14"))
+                                        .withLabel("Receber notificações"),
+                                Button.secondary("events:removeRole", Emoji.fromUnicode("⛔"))
+                                        .withLabel("Deixar de receber")));
 
         messageAction.queue(message -> {
             message.createThreadChannel(
                     "%s %s".formatted(name, DateTimeFormatter.ofPattern("dd/MM").format(LocalDateTime.now())))
                     .queue((threadChannel) -> {
                         if (logFile != null && logFile.exists()) {
-                            threadChannel.sendMessage("Confira o registro do evento ☺️").addFiles(FileUpload.fromData(logFile)).queue();
+                            threadChannel.sendMessage("Confira o registro do evento ☺️")
+                                    .addFiles(FileUpload.fromData(logFile)).queue();
                         } else {
                             threadChannel.sendMessage("Conta aqui como foi o evento ☺️").queue();
                         }
