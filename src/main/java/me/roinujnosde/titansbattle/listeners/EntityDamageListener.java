@@ -105,6 +105,9 @@ public class EntityDamageListener extends TBListener {
 
         GroupManager groupManager = TitansBattle.getInstance().getGroupManager();
         if (groupManager != null) {
+            if (defender.equals(attacker)) {
+                return;
+            }
             event.setCancelled(groupManager.sameGroup(defender.getUniqueId(), attacker.getUniqueId()));
         }
     }
