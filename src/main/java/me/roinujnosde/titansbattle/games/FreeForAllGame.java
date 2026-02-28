@@ -688,6 +688,25 @@ public class FreeForAllGame extends Game {
         earlyKillsCount.clear();
     }
 
+    @Override
+    public void finish(boolean cancelled, boolean awardKillPoints) {
+        // Clear saved inventories when game ends
+        savedInventories.clear();
+        savedArmor.clear();
+        savedKillsBackup.clear();
+        cancelDeathmatchTask();
+        clearDeathmatchEffects();
+        deathmatchStarted = false;
+
+        if (deathmatchBossBar != null) {
+            deathmatchBossBar.removeAll();
+            deathmatchBossBar = null;
+        }
+
+        super.finish(cancelled, awardKillPoints);
+        earlyKillsCount.clear();
+    }
+
     private void scheduleDeathmatch() {
         Integer minutes = getConfig().getDeathmatchAfterMinutes();
         if (minutes == null || minutes <= 0) {

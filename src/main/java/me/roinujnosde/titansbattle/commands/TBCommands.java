@@ -6,6 +6,7 @@ import co.aikar.commands.annotation.*;
 import co.aikar.commands.bukkit.contexts.OnlinePlayer;
 import me.roinujnosde.titansbattle.BaseGameConfiguration;
 import me.roinujnosde.titansbattle.TitansBattle;
+import me.roinujnosde.titansbattle.BaseGame;
 import me.roinujnosde.titansbattle.challenges.ArenaConfiguration;
 import me.roinujnosde.titansbattle.dao.ConfigurationDao;
 import me.roinujnosde.titansbattle.exceptions.CommandNotSupportedException;
@@ -250,6 +251,11 @@ public class TBCommands extends BaseCommand {
             return;
         }
         config = (arena == null) ? game.getConfig() : arena;
+
+        BaseGame currentBaseGame = plugin.getBaseGameFrom(sender);
+        if (currentBaseGame != null) {
+            currentBaseGame.onLeave(plugin.getDatabaseManager().getWarrior(sender));
+        }
 
         Location watchroom = config.getWatchroom();
         sender.teleport(watchroom);

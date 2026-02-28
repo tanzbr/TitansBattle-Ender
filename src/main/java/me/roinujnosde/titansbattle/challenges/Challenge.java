@@ -23,7 +23,7 @@ public class Challenge extends BaseGame {
     private Group winnerGroup;
     private List<Warrior> winners = new ArrayList<>();
     private Warrior lastCasualty;
-    
+
     public Challenge(@NotNull TitansBattle plugin, @NotNull ArenaConfiguration config) {
         super(plugin, config);
     }
@@ -49,7 +49,7 @@ public class Challenge extends BaseGame {
 
     @Override
     protected void processRemainingPlayers(@NotNull Warrior warrior) {
-    	lastCasualty = warrior;
+        lastCasualty = warrior;
         if (getConfig().isGroupMode()) {
             if (getGroupParticipants().size() == 1) {
                 getGroupParticipants().keySet().stream().findAny().ifPresent(g -> {
@@ -92,6 +92,12 @@ public class Challenge extends BaseGame {
     }
 
     @Override
+    public void finish(boolean cancelled, boolean awardKillPoints) {
+        super.finish(cancelled, awardKillPoints);
+        plugin.getChallengeManager().remove(this);
+    }
+
+    @Override
     protected void processWinners(boolean awardAllPrizes) {
         if (winnerGroup != null) {
             Bukkit.getPluginManager().callEvent(new GroupWinEvent(winnerGroup));
@@ -113,7 +119,8 @@ public class Challenge extends BaseGame {
         }
         if (getConfig().isGroupMode()) {
             winnerGroup = getGroup(warrior);
-            winners = getParticipants().stream().filter(p -> winnerGroup.isMember(p.getUniqueId())).collect(Collectors.toList());
+            winners = getParticipants().stream().filter(p -> winnerGroup.isMember(p.getUniqueId()))
+                    .collect(Collectors.toList());
         } else {
             winners.add(warrior);
         }
@@ -129,7 +136,7 @@ public class Challenge extends BaseGame {
         if (!getConfig().isGroupMode()) {
             return lastCasualty.getName();
         }
-        
+
         return getGroup(lastCasualty).getName();
     }
 }

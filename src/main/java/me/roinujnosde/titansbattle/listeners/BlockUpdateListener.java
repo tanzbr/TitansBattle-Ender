@@ -7,10 +7,10 @@ import me.roinujnosde.titansbattle.types.Warrior;
 import java.util.Iterator;
 import java.util.List;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
-import org.bukkit.event.Cancellable;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.block.BlockBreakEvent;
@@ -39,35 +39,62 @@ public class BlockUpdateListener extends TBListener {
             return;
         }
 
-        if (!game.getConfig().isAllowBlockInteraction()) {
+        if (!game.getConfig().isAllowBlockBreak()) {
             event.setCancelled(true);
             return;
+        }
+
+        if (game.getConfig().isAllowBreakOnlyPlacedBlocks()) {
+            if (!game.isPlacedBlock(event.getBlock().getLocation())) {
+                event.setCancelled(true);
+                return;
+            }
         }
 
         List<String> whitelist = game.getConfig().getWhitelistedDropMaterials();
         if (whitelist != null && !whitelist.contains(event.getBlock().getType().name())) {
             event.setCancelled(true);
             event.getBlock().setType(Material.AIR);
+            game.removePlacedBlock(event.getBlock().getLocation());
+            return;
+        }
+
+        if (!event.isCancelled()) {
+            game.removePlacedBlock(event.getBlock().getLocation());
         }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlace(BlockPlaceEvent event) {
-        cancel(event.getPlayer(), event);
-    }
-
-    private void cancel(Player player, Cancellable event) {
+        Player player = event.getPlayer();
         BaseGame game = plugin.getBaseGameFrom(player);
         if (game == null) {
-            return;
-        }
-        if (game.getConfig().isAllowBlockInteraction()) {
             return;
         }
 
         Warrior warrior = plugin.getDatabaseManager().getWarrior(player);
         if (!game.isInBattle(warrior)) {
             event.setCancelled(true);
+            return;
+        }
+
+        if (!game.getConfig().isAllowBlockPlace()) {
+            event.setCancelled(true);
+            return;
+        }
+
+        if (!event.isCancelled()) {
+            game.addPlacedBlock(event.getBlock().getLocation());
+
+            List<String> autoRemove = game.getConfig().getAutoRemoveBlocks();
+            if (autoRemove != null && autoRemove.contains(event.getBlock().getType().name())) {
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    if (game.isPlacedBlock(event.getBlock().getLocation())) {
+                        event.getBlock().setType(Material.AIR);
+                        game.removePlacedBlock(event.getBlock().getLocation());
+                    }
+                }, 1200L); // 1 minute
+            }
         }
     }
 
@@ -83,20 +110,29 @@ public class BlockUpdateListener extends TBListener {
 
     private void processExplosion(List<Block> blockList) {
         me.roinujnosde.titansbattle.games.Game game = plugin.getGameManager().getCurrentGame().orElse(null);
-        if (game == null || !game.getConfig().isAllowBlockInteraction()) {
+        if (game == null || !game.getConfig().isAllowBlockBreak()) {
             return;
         }
 
-        List<String> whitelist = game.getConfig().getWhitelistedDropMaterials();
-        if (whitelist != null) {
-            Iterator<Block> iterator = blockList.iterator();
-            while (iterator.hasNext()) {
-                Block block = iterator.next();
-                if (!whitelist.contains(block.getType().name())) {
-                    block.setType(org.bukkit.Material.AIR);
+        Iterator<Block> iterator = blockList.iterator();
+        while (iterator.hasNext()) {
+            Block block = iterator.next();
+
+            if (game.getConfig().isAllowBreakOnlyPlacedBlocks()) {
+                if (!game.isPlacedBlock(block.getLocation())) {
                     iterator.remove();
+                    continue;
                 }
             }
+
+            List<String> whitelist = game.getConfig().getWhitelistedDropMaterials();
+            if (whitelist != null && !whitelist.contains(block.getType().name())) {
+                block.setType(org.bukkit.Material.AIR);
+                iterator.remove();
+                continue;
+            }
+
+            game.removePlacedBlock(block.getLocation());
         }
     }
 

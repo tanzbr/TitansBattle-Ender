@@ -57,11 +57,18 @@ public abstract class BaseGame {
     protected final Map<Warrior, Long> lastCombatTime = new HashMap<>();
     protected final Set<Warrior> loggedCampers = new HashSet<>();
     protected final HashMap<Warrior, Double> damageDealt = new HashMap<>();
+    protected final Set<Location> placedBlocks = new HashSet<>();
 
     private final List<BukkitTask> tasks = new ArrayList<>();
     private LobbyAnnouncementTask lobbyTask;
 
     protected GameLogger gameLogger;
+
+    private BukkitTask killTheKillerTask;
+    private BukkitTask killTheKillerTimerTask;
+    private Warrior killTheKillerTarget;
+    private int killTheKillerTimeLeft;
+    private org.bukkit.boss.BossBar killTheKillerBossBar;
 
     public BaseGame(TitansBattle plugin, BaseGameConfiguration config) {
         this.plugin = plugin;
@@ -131,6 +138,10 @@ public abstract class BaseGame {
     public void finish(boolean cancelled, boolean awardKillPoints) {
         lastCombatTime.clear();
         loggedCampers.clear();
+        for (Location loc : placedBlocks) {
+            loc.getBlock().setType(org.bukkit.Material.AIR);
+        }
+        placedBlocks.clear();
         // Control holograms for npcs
         Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh off glad_iniciando");
         Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh off iniciangoagora");
@@ -141,6 +152,7 @@ public abstract class BaseGame {
         Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "npc despawn");
 
         teleportAll(getConfig().getExit());
+        endKillTheKiller(false);
         killTasks();
         runCommandsAfterBattle(getParticipants());
         if (getConfig().isUseKits()) {
@@ -249,6 +261,7 @@ public abstract class BaseGame {
                 String victimStr = victim.getName() + "(" + killsCount.getOrDefault(victim, 0) + " kills)";
                 gameLogger.logLine("⚔️ " + killerStr + " eliminou " + victimStr);
             }
+            processKillTheKillerDeath(victim, killer);
         }
         broadcastDeathMessage(victim, killer);
         processPlayerExit(victim);
@@ -580,6 +593,13 @@ public abstract class BaseGame {
         }
         participants.remove(warrior);
         Group group = getGroup(warrior);
+        groups.remove(warrior);
+        killsCount.remove(warrior);
+        casualties.remove(warrior);
+        casualtiesWatching.remove(warrior);
+        lastCombatTime.remove(warrior);
+        loggedCampers.remove(warrior);
+        damageDealt.remove(warrior);
         if (!isLobby() && !cancelled) {
             runCommandsAfterBattle(Collections.singletonList(warrior));
             processRemainingPlayers(warrior);
@@ -883,6 +903,13 @@ public abstract class BaseGame {
                 WorldBorder worldBorder = getConfig().getBorderCenter().getWorld().getWorldBorder();
                 addTask(new BorderTask(worldBorder).runTaskTimer(plugin, borderInterval, borderInterval));
             }
+
+            if (getConfig().isMinigameKillTheKillerEnabled()) {
+                long interval = getConfig().getMinigameKillTheKillerInterval() * 20L;
+                killTheKillerTask = Bukkit.getScheduler().runTaskTimer(plugin,
+                        BaseGame.this::processKillTheKillerChance, interval, interval);
+                addTask(killTheKillerTask);
+            }
         }
     }
 
@@ -974,10 +1001,146 @@ public abstract class BaseGame {
         if (battle && isParticipant(warrior) && !casualties.contains(warrior)) {
             lastCombatTime.put(warrior, System.currentTimeMillis());
             Player player = warrior.toOnlinePlayer();
-            if (player != null && player.hasPotionEffect(org.bukkit.potion.PotionEffectType.GLOWING)) {
+            // Don't remove glow if they are the kill the killer target
+            if (player != null && player.hasPotionEffect(org.bukkit.potion.PotionEffectType.GLOWING)
+                    && !warrior.equals(killTheKillerTarget)) {
                 player.removePotionEffect(org.bukkit.potion.PotionEffectType.GLOWING);
             }
         }
+    }
+
+    private void processKillTheKillerChance() {
+        if (!battle || cancelled || killTheKillerTarget != null)
+            return;
+        if (Math.random() * 100 > getConfig().getMinigameKillTheKillerChance())
+            return;
+
+        Warrior target = null;
+        int maxKills = -1;
+        List<Warrior> eligible = new ArrayList<>(getParticipants());
+        eligible.removeAll(getCasualties());
+        Collections.shuffle(eligible);
+
+        for (Warrior w : eligible) {
+            int kills = getKillsCount().getOrDefault(w, 0);
+            if (kills > maxKills) {
+                maxKills = kills;
+                target = w;
+            }
+        }
+
+        if (target == null)
+            return;
+        startKillTheKiller(target);
+    }
+
+    private void startKillTheKiller(Warrior target) {
+        this.killTheKillerTarget = target;
+        this.killTheKillerTimeLeft = getConfig().getMinigameKillTheKillerDuration();
+
+        Player p = target.toOnlinePlayer();
+        if (p != null) {
+            target.sendMessage("§c§lVocê se tornou o Alvo do minigame! Sobreviva!");
+            p.setGlowing(true); // Paper 1.21 supports this
+        }
+
+        String bossbarText = getLang("minigame_kill_the_killer_bossbar", target.getName(),
+                getConfig().getMinigameKillTheKillerPoints(), formatTime(killTheKillerTimeLeft));
+        this.killTheKillerBossBar = Bukkit.createBossBar(ChatColor.translateAlternateColorCodes('&', bossbarText),
+                org.bukkit.boss.BarColor.RED, org.bukkit.boss.BarStyle.SOLID);
+
+        getPlayerParticipantsStream().forEach(participant -> killTheKillerBossBar.addPlayer(participant));
+
+        broadcastKey("minigame_kill_the_killer_started", target.getName());
+
+        if (gameLogger != null) {
+            gameLogger.logLine("🔴 [MINIGAME] " + target.getName() + " foi selecionado como Killer (alvo) com "
+                    + getKillsCount().getOrDefault(target, 0) + " kills!");
+        }
+
+        this.killTheKillerTimerTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (killTheKillerTarget == null || cancelled || !battle || casualties.contains(killTheKillerTarget)) {
+                endKillTheKiller(false);
+                return;
+            }
+            killTheKillerTimeLeft--;
+            if (killTheKillerTimeLeft <= 0) {
+                endKillTheKiller(false);
+                return;
+            }
+            killTheKillerBossBar.setTitle(ChatColor.translateAlternateColorCodes('&',
+                    getLang("minigame_kill_the_killer_bossbar", killTheKillerTarget.getName(),
+                            getConfig().getMinigameKillTheKillerPoints(), formatTime(killTheKillerTimeLeft))));
+        }, 20L, 20L);
+        addTask(this.killTheKillerTimerTask);
+    }
+
+    private void endKillTheKiller(boolean killed) {
+        if (killTheKillerTarget != null) {
+            Player p = killTheKillerTarget.toOnlinePlayer();
+            if (p != null)
+                p.setGlowing(false);
+            if (!killed && p != null && !casualties.contains(killTheKillerTarget)) {
+                killTheKillerTarget.sendMessage("§a§lVocê sobreviveu ao minigame!");
+            }
+        }
+        this.killTheKillerTarget = null;
+        if (this.killTheKillerBossBar != null) {
+            this.killTheKillerBossBar.removeAll();
+            this.killTheKillerBossBar = null;
+        }
+        if (this.killTheKillerTimerTask != null) {
+            this.killTheKillerTimerTask.cancel();
+            this.killTheKillerTimerTask = null;
+        }
+        if (!killed && gameLogger != null) {
+            gameLogger.logLine(
+                    "⚪ [MINIGAME] O tempo esgotou ou o Killer caiu por outros meios. Minigame finalizado sem recompensas a caçadores.");
+        }
+    }
+
+    private void processKillTheKillerDeath(Warrior victim, Warrior killer) {
+        if (killTheKillerTarget != null && victim.equals(killTheKillerTarget)) {
+            if (killer != null) {
+                Group killerGroup = getGroup(killer);
+                int points = getConfig().getMinigameKillTheKillerPoints();
+                if (killerGroup != null && points > 0) {
+                    String reason = "Minigame Mate o Killer";
+                    Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(),
+                            String.format("clanleague addevent %s %d %s", killerGroup.getName(), points, reason));
+                    if (gameLogger != null) {
+                        gameLogger.logLine("🟢 [MINIGAME] " + killer.getName() + " matou o Killer e rendeu " + points
+                                + " pts ao clã " + killerGroup.getName() + "!");
+                    }
+                    broadcastKey("minigame_kill_the_killer_ended", killer.getName(), victim.getName(), points,
+                            killerGroup.getName());
+                } else if (points > 0) {
+                    if (gameLogger != null) {
+                        gameLogger.logLine("🟢 [MINIGAME] " + killer.getName()
+                                + " matou o Killer mas não está num clã para receber os pontos.");
+                    }
+                }
+            }
+            endKillTheKiller(true);
+        }
+    }
+
+    private String formatTime(int seconds) {
+        long m = seconds / 60;
+        long s = seconds % 60;
+        return String.format("%02d:%02d", m, s);
+    }
+
+    public void addPlacedBlock(Location location) {
+        placedBlocks.add(location);
+    }
+
+    public void removePlacedBlock(Location location) {
+        placedBlocks.remove(location);
+    }
+
+    public boolean isPlacedBlock(Location location) {
+        return placedBlocks.contains(location);
     }
 
 }

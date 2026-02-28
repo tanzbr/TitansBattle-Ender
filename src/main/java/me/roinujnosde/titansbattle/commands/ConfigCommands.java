@@ -46,13 +46,23 @@ public class ConfigCommands extends BaseCommand {
     }
 
     private void createFile(@NotNull CommandSender sender,
-                            @NotNull String name,
-                            @NotNull Class<? extends BaseGameConfiguration> clazz,
-                            @NotNull String successMessageKey) {
+            @NotNull String name,
+            @NotNull Class<? extends BaseGameConfiguration> clazz,
+            @NotNull String successMessageKey) {
         if (configDao.create(name, clazz)) {
             sender.sendMessage(plugin.getLang(successMessageKey, name));
         } else {
             sender.sendMessage(plugin.getLang("config-creation-error"));
+        }
+    }
+
+    private void getKit(@NotNull Player sender, @NotNull BaseGameConfiguration config) {
+        Kit kit = config.getKit();
+        if (kit != null) {
+            kit.set(sender);
+            sender.sendMessage(plugin.getLang("kit-received"));
+        } else {
+            sender.sendMessage(plugin.getLang("kit-not-found"));
         }
     }
 
@@ -76,7 +86,8 @@ public class ConfigCommands extends BaseCommand {
         saveInventory(sender, config);
     }
 
-    private void editPrizes(CommandSender sender, BaseGameConfiguration config, Prize prize, String field, String value) {
+    private void editPrizes(CommandSender sender, BaseGameConfiguration config, Prize prize, String field,
+            String value) {
         Prizes prizes = config.getPrizes(prize);
         if (ConfigUtils.setValue(prizes, field, value)) {
             sender.sendMessage(plugin.getLang("changed-field-value"));
@@ -147,14 +158,22 @@ public class ConfigCommands extends BaseCommand {
             ConfigCommands.this.setKit(sender, game);
         }
 
+        @Subcommand("%getkit|getkit")
+        @CommandPermission("titansbattle.setinventory")
+        @CommandCompletion("@games")
+        @Description("{@@command.description.getkit}")
+        public void getKit(Player sender, @Values("@games") GameConfiguration game) {
+            ConfigCommands.this.getKit(sender, game);
+        }
+
         @Subcommand("%setprize|setprize")
         @CommandPermission("titansbattle.setinventory")
         @CommandCompletion("@games")
         @Description("{@@command.description.setprize}")
         public void setPrize(Player sender,
-                             @Values("@games") GameConfiguration game,
-                             Prize prize,
-                             PrizeReceiver receiver) {
+                @Values("@games") GameConfiguration game,
+                Prize prize,
+                PrizeReceiver receiver) {
             ConfigCommands.this.setPrize(sender, game, prize, receiver);
         }
 
@@ -163,10 +182,10 @@ public class ConfigCommands extends BaseCommand {
         @CommandCompletion("@games @prizes @config_fields:class=prizes @empty")
         @Description("{@@command.description.edit.prize}")
         public void editPrizes(CommandSender sender,
-                               @Values("@games") GameConfiguration game,
-                               Prize prize,
-                               @Values("@config_fields:class=prizes") String field,
-                               String value) {
+                @Values("@games") GameConfiguration game,
+                Prize prize,
+                @Values("@config_fields:class=prizes") String field,
+                String value) {
             ConfigCommands.this.editPrizes(sender, game, prize, field, value);
         }
 
@@ -175,18 +194,18 @@ public class ConfigCommands extends BaseCommand {
         @CommandCompletion("@games @config_fields:class=game")
         @Description("{@@command.description.edit.game}")
         public void editConfig(CommandSender sender,
-                               @Values("@games") GameConfiguration game,
-                               @Values("@config_fields:class=game") String field,
-                               String value) {
+                @Values("@games") GameConfiguration game,
+                @Values("@config_fields:class=game") String field,
+                String value) {
             ConfigCommands.this.editConfig(sender, game, field, value);
         }
-
 
         @Subcommand("%setdestination|setdestination")
         @CommandPermission("titansbattle.setdestination")
         @CommandCompletion("@games @destinations|ARENA_ENTRANCE")
         @Description("{@@command.description.setdestination.game}")
-        public void setDestination(Player player, @Values("@games") GameConfiguration game,  @Values("@destinations") Destination destination) {
+        public void setDestination(Player player, @Values("@games") GameConfiguration game,
+                @Values("@destinations") Destination destination) {
             ConfigCommands.this.setDestination(player, game, destination);
         }
 
@@ -195,9 +214,9 @@ public class ConfigCommands extends BaseCommand {
         @CommandCompletion("@games @destinations|ARENA_ENTRANCE @range:1-99")
         @Description("{@@command.description.setdestination.game}")
         public void setArenaEntrance(Player player,
-                                     @Values("@games") GameConfiguration game,
-                                     @Values("ARENA_ENTRANCE") String destination,
-                                     int index) {
+                @Values("@games") GameConfiguration game,
+                @Values("ARENA_ENTRANCE") String destination,
+                int index) {
             ConfigCommands.this.setArenaEntrance(player, game, index);
         }
 
@@ -221,14 +240,22 @@ public class ConfigCommands extends BaseCommand {
             ConfigCommands.this.setKit(sender, arena);
         }
 
+        @Subcommand("%getkit|getkit")
+        @CommandPermission("titansbattle.setinventory")
+        @CommandCompletion("@arenas")
+        @Description("{@@command.description.challenge.getkit}")
+        public void getKit(Player sender, @Values("@arenas") ArenaConfiguration arena) {
+            ConfigCommands.this.getKit(sender, arena);
+        }
+
         @Subcommand("%setprize|setprize")
         @CommandPermission("titansbattle.setinventory")
         @CommandCompletion("@arenas")
         @Description("{@@command.description.setprize}")
         public void setPrize(Player sender,
-                             @Values("@arenas") ArenaConfiguration arena,
-                             Prize prize,
-                             PrizeReceiver receiver) {
+                @Values("@arenas") ArenaConfiguration arena,
+                Prize prize,
+                PrizeReceiver receiver) {
             ConfigCommands.this.setPrize(sender, arena, prize, receiver);
         }
 
@@ -237,10 +264,10 @@ public class ConfigCommands extends BaseCommand {
         @CommandCompletion("@arenas @prizes @config_fields:class=prizes @empty")
         @Description("{@@command.description.edit.prize}")
         public void editPrizes(CommandSender sender,
-                               @Values("@arenas") ArenaConfiguration arena,
-                               Prize prize,
-                               @Values("@config_fields:class=prizes") String field,
-                               String value) {
+                @Values("@arenas") ArenaConfiguration arena,
+                Prize prize,
+                @Values("@config_fields:class=prizes") String field,
+                String value) {
             ConfigCommands.this.editPrizes(sender, arena, prize, field, value);
         }
 
@@ -249,9 +276,9 @@ public class ConfigCommands extends BaseCommand {
         @CommandCompletion("@arenas @config_fields:class=arena")
         @Description("{@@command.description.edit.game}")
         public void editConfig(CommandSender sender,
-                               @Values("@arenas") ArenaConfiguration arena,
-                               @Values("@config_fields:class=arena") String field,
-                               String value) {
+                @Values("@arenas") ArenaConfiguration arena,
+                @Values("@config_fields:class=arena") String field,
+                String value) {
             ConfigCommands.this.editConfig(sender, arena, field, value);
         }
 
@@ -260,8 +287,8 @@ public class ConfigCommands extends BaseCommand {
         @CommandCompletion("@arenas @destinations|ARENA_ENTRANCE")
         @Description("{@@command.description.challenge.setdestination}")
         public void setDestination(Player player,
-                                   @Values("@arenas") ArenaConfiguration arena,
-                                   @Values("@destinations") Destination destination) {
+                @Values("@arenas") ArenaConfiguration arena,
+                @Values("@destinations") Destination destination) {
             ConfigCommands.this.setDestination(player, arena, destination);
         }
 
@@ -270,9 +297,9 @@ public class ConfigCommands extends BaseCommand {
         @CommandCompletion("@arenas @destinations|ARENA_ENTRANCE @range:1-2")
         @Description("{@@command.description.challenge.setdestination}")
         public void setArenaEntrance(Player player,
-                                     @Values("@arenas") ArenaConfiguration arena,
-                                     @Values("ARENA_ENTRANCE") String destination,
-                                     @Values("@range:1-2") int index) {
+                @Values("@arenas") ArenaConfiguration arena,
+                @Values("ARENA_ENTRANCE") String destination,
+                @Values("@range:1-2") int index) {
             ConfigCommands.this.setArenaEntrance(player, arena, index);
         }
     }

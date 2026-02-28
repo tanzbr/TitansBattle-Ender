@@ -36,7 +36,8 @@ public abstract class Game extends BaseGame {
     }
 
     /**
-     * Attempts to find the Killer in the game, returns null if none found or if it's disabled
+     * Attempts to find the Killer in the game, returns null if none found or if
+     * it's disabled
      */
     @Nullable
     public Warrior findKiller() {
@@ -60,7 +61,8 @@ public abstract class Game extends BaseGame {
     public void start() {
         super.start();
 
-        // Discord announcement is now handled 30 minutes before by the scheduler in TaskManager
+        // Discord announcement is now handled 30 minutes before by the scheduler in
+        // TaskManager
         discordAnnounce("discord_game_starting");
         gameManager.setCurrentGame(this);
     }
@@ -68,6 +70,12 @@ public abstract class Game extends BaseGame {
     @Override
     public void finish(boolean cancelled) {
         super.finish(cancelled);
+        gameManager.setCurrentGame(null);
+    }
+
+    @Override
+    public void finish(boolean cancelled, boolean awardKillPoints) {
+        super.finish(cancelled, awardKillPoints);
         gameManager.setCurrentGame(null);
     }
 

@@ -3,6 +3,7 @@ package me.roinujnosde.titansbattle.listeners;
 import me.roinujnosde.titansbattle.TitansBattle;
 import me.roinujnosde.titansbattle.types.Kit;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -52,6 +53,9 @@ public class ItemsProtectionListener extends TBListener {
         if (plugin.getBaseGameFrom(player) != null) {
             return;
         }
+
+        if (player.getGameMode().equals(GameMode.CREATIVE))
+            return;
 
         PlayerInventory inventory = player.getInventory();
         for (ItemStack item : inventory.getContents()) {

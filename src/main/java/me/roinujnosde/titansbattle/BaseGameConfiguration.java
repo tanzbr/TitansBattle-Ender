@@ -75,8 +75,14 @@ public abstract class BaseGameConfiguration implements ConfigurationSerializable
     protected Integer deathmatchAfterMinutes = 0;
     @Path("bossbar.deathmatch_title")
     protected String deathmatchBossbarTitle = "&c&lDEATHMATCH!";
-    @Path("allow_block_interaction")
-    protected Boolean allowBlockInteraction = false;
+    @Path("allow_block_place")
+    protected Boolean allowBlockPlace = false;
+    @Path("allow_block_break")
+    protected Boolean allowBlockBreak = false;
+    @Path("allow_break_only_placed_blocks")
+    protected Boolean allowBreakOnlyPlacedBlocks = false;
+    @Path("auto_remove_blocks")
+    protected List<String> autoRemoveBlocks = new ArrayList<>();
     @Path("whitelisted_drop_materials")
     protected List<String> whitelistedDropMaterials;
     @Path("points.early_kill_bonus")
@@ -105,6 +111,17 @@ public abstract class BaseGameConfiguration implements ConfigurationSerializable
     protected Integer borderInterval = 120;
     @Path("worldborder.damage")
     protected Double borderDamage = 5.0;
+
+    @Path("minigame.kill_the_killer.enabled")
+    protected Boolean minigameKillTheKillerEnabled = false;
+    @Path("minigame.kill_the_killer.chance")
+    protected Double minigameKillTheKillerChance = 10.0;
+    @Path("minigame.kill_the_killer.interval")
+    protected Integer minigameKillTheKillerInterval = 300;
+    @Path("minigame.kill_the_killer.duration")
+    protected Integer minigameKillTheKillerDuration = 120;
+    @Path("minigame.kill_the_killer.points")
+    protected Integer minigameKillTheKillerPoints = 5;
 
     public @NotNull FileConfiguration getFileConfiguration() {
         if (fileConfiguration == null) {
@@ -301,8 +318,23 @@ public abstract class BaseGameConfiguration implements ConfigurationSerializable
         return commandsAfterBattle;
     }
 
-    public Boolean isAllowBlockInteraction() {
-        return allowBlockInteraction;
+    public Boolean isAllowBlockPlace() {
+        return allowBlockPlace;
+    }
+
+    public Boolean isAllowBlockBreak() {
+        return allowBlockBreak;
+    }
+
+    public Boolean isAllowBreakOnlyPlacedBlocks() {
+        return allowBreakOnlyPlacedBlocks;
+    }
+
+    public @NotNull List<String> getAutoRemoveBlocks() {
+        if (autoRemoveBlocks == null) {
+            autoRemoveBlocks = new ArrayList<>();
+        }
+        return autoRemoveBlocks;
     }
 
     public @Nullable List<String> getWhitelistedDropMaterials() {
@@ -331,6 +363,26 @@ public abstract class BaseGameConfiguration implements ConfigurationSerializable
 
     public Double getBorderDamage() {
         return borderDamage;
+    }
+
+    public Boolean isMinigameKillTheKillerEnabled() {
+        return minigameKillTheKillerEnabled;
+    }
+
+    public Double getMinigameKillTheKillerChance() {
+        return minigameKillTheKillerChance;
+    }
+
+    public Integer getMinigameKillTheKillerInterval() {
+        return minigameKillTheKillerInterval;
+    }
+
+    public Integer getMinigameKillTheKillerDuration() {
+        return minigameKillTheKillerDuration;
+    }
+
+    public Integer getMinigameKillTheKillerPoints() {
+        return minigameKillTheKillerPoints;
     }
 
     public Prizes getPrizes(@NotNull Prize prize) {
