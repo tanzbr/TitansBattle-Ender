@@ -2,6 +2,7 @@ package me.roinujnosde.titansbattle.hooks.papi;
 
 import me.clip.placeholderapi.PlaceholderAPIPlugin;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
+import me.roinujnosde.titansbattle.BaseGame;
 import me.roinujnosde.titansbattle.TitansBattle;
 import me.roinujnosde.titansbattle.games.Game;
 import me.roinujnosde.titansbattle.managers.DatabaseManager;
@@ -9,8 +10,11 @@ import me.roinujnosde.titansbattle.types.GameConfiguration;
 import me.roinujnosde.titansbattle.types.Group;
 import me.roinujnosde.titansbattle.types.Warrior;
 import me.roinujnosde.titansbattle.types.Winners;
+import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.function.Predicate;
@@ -34,6 +38,8 @@ public class TBExpansion extends PlaceholderExpansion {
     private static final Pattern LAST_WINNER_KILLER_PATTERN;
     private static final Pattern PREFIX_PATTERN;
 
+    private static final double WATCHROOM_RADIUS = 100.0;
+
     static {
         PARTICIPANTS_SIZE = Pattern.compile("participants_size");
         GROUPS_SIZE = Pattern.compile("groups_size");
@@ -43,10 +49,34 @@ public class TBExpansion extends PlaceholderExpansion {
         LAST_WINNER_GROUP_PATTERN = Pattern.compile("last_winner_group_(?<game>\\S+)");
         LAST_WINNER_KILLER_PATTERN = Pattern.compile("last_(?<type>winner|killer)_(?<game>\\S+)");
         PREFIX_PATTERN = Pattern.compile("(?<game>^\\S+)_(?<type>winner|killer)_prefix");
-        PLACEHOLDERS = Arrays.asList("%titansbattle_groups_size%", "%titansbattle_participants_size%",
+        PLACEHOLDERS = Arrays.asList(
+                // Existing placeholders
+                "%titansbattle_groups_size%", "%titansbattle_participants_size%",
                 "%titansbattle_arena_in_use_<arena>%", "%titansbattle_last_winner_group_<game>%",
                 "%titansbattle_last_<killer|winner>_<game>%", "%titansbattle_<game>_<killer|winner>_prefix%",
-                "%titansbattle_group_total_victories%", "%titansbattle_total_kills%", "%titansbattle_total_deaths%");
+                "%titansbattle_group_total_victories%", "%titansbattle_total_kills%", "%titansbattle_total_deaths%",
+                // New: per-player placeholders
+                "%titansbattle_player_is_in_game%",
+                "%titansbattle_player_is_spectating%",
+                "%titansbattle_player_game_name%",
+                "%titansbattle_player_kills%",
+                "%titansbattle_player_deaths%",
+                "%titansbattle_player_group_name%",
+                "%titansbattle_player_group_remaining%",
+                "%titansbattle_player_group_kills%",
+                "%titansbattle_player_damage_dealt%",
+                "%titansbattle_player_is_in_lobby%",
+                "%titansbattle_player_is_in_battle%",
+                // New: game-global placeholders
+                "%titansbattle_game_is_active%",
+                "%titansbattle_game_is_lobby%",
+                "%titansbattle_game_killer%",
+                "%titansbattle_game_killer_kills%",
+                "%titansbattle_game_alive_count%",
+                "%titansbattle_game_groups_remaining%",
+                "%titansbattle_game_type%",
+                "%titansbattle_game_max_players%",
+                "%titansbattle_game_casualties_count%");
     }
 
     public TBExpansion(TitansBattle plugin) {
@@ -85,23 +115,23 @@ public class TBExpansion extends PlaceholderExpansion {
 
     @Override
     public String onRequest(OfflinePlayer player, @NotNull String params) {
+        Optional<Game> currentGame = plugin.getGameManager().getCurrentGame();
+
+        // ─── Existing legacy placeholders ──────────────────────────────
 
         Matcher participantsSizeMatcher = PARTICIPANTS_SIZE.matcher(params);
         if (participantsSizeMatcher.matches()) {
-            Optional<Game> currentGame = plugin.getGameManager().getCurrentGame();
             return currentGame.map(game -> String.valueOf(game.getParticipants().size()))
                     .orElse("0");
         }
 
         Matcher isStartingMatcher = IS_STARTING.matcher(params);
         if (isStartingMatcher.matches()) {
-            Optional<Game> currentGame = plugin.getGameManager().getCurrentGame();
             return currentGame.map(game -> game.isLobby() ? "true" : "false").orElse("false");
         }
 
         Matcher gameNameMatcher = GAME_NAME.matcher(params);
         if (gameNameMatcher.matches()) {
-            Optional<Game> currentGame = plugin.getGameManager().getCurrentGame();
             String gameName = currentGame.map(game -> game.getConfig().getName()).orElse(null);
             if (gameName == null) {
                 return "Nenhum";
@@ -136,7 +166,6 @@ public class TBExpansion extends PlaceholderExpansion {
 
         Matcher groupsSizeMatcher = GROUPS_SIZE.matcher(params);
         if (groupsSizeMatcher.matches()) {
-            Optional<Game> currentGame = plugin.getGameManager().getCurrentGame();
             return currentGame.map(game -> String.valueOf(game.getGroupParticipants().size()))
                     .orElse("0");
         }
@@ -162,9 +191,55 @@ public class TBExpansion extends PlaceholderExpansion {
             }
         }
 
+        // ─── New: Game-global placeholders (no player required) ────────
+
+        switch (params) {
+            case "game_is_active":
+                return toString(currentGame.isPresent());
+            case "game_is_lobby":
+                return currentGame.map(game -> toString(game.isLobby())).orElse(toString(false));
+            case "game_killer": {
+                return currentGame.map(game -> {
+                    Warrior killer = game.findKiller();
+                    return killer != null ? killer.getName() : "";
+                }).orElse("");
+            }
+            case "game_killer_kills": {
+                return currentGame.map(game -> {
+                    Warrior killer = game.findKiller();
+                    if (killer == null)
+                        return "0";
+                    return valueOf(game.getKillsCount().getOrDefault(killer, 0));
+                }).orElse("0");
+            }
+            case "game_alive_count": {
+                return currentGame.map(game -> {
+                    int alive = game.getParticipants().size() - game.getCasualties().size();
+                    return valueOf(Math.max(0, alive));
+                }).orElse("0");
+            }
+            case "game_groups_remaining":
+                return currentGame.map(game -> valueOf(game.getGroupParticipants().size())).orElse("0");
+            case "game_type": {
+                return currentGame.map(game -> {
+                    if (game.getConfig() instanceof GameConfiguration) {
+                        return ((GameConfiguration) game.getConfig()).getType();
+                    }
+                    return game.getClass().getSimpleName();
+                }).orElse("");
+            }
+            case "game_max_players":
+                return currentGame.map(game -> valueOf(game.getConfig().getMaximumPlayers())).orElse("0");
+            case "game_casualties_count":
+                return currentGame.map(game -> valueOf(game.getCasualties().size())).orElse("0");
+        }
+
+        // ─── Player-required placeholders ──────────────────────────────
+
         if (player == null) {
             return "";
         }
+
         Matcher prefix = PREFIX_PATTERN.matcher(params);
         if (prefix.find()) {
             String game = prefix.group("game");
@@ -176,8 +251,94 @@ public class TBExpansion extends PlaceholderExpansion {
                     return getWinnerPrefix(player, game);
             }
         }
+
         Warrior warrior = plugin.getDatabaseManager().getWarrior(player);
+
+        // ─── New: Per-player placeholders ──────────────────────────────
+
         switch (params) {
+            case "player_is_in_game":
+                return currentGame.map(game -> toString(game.isParticipant(warrior))).orElse(toString(false));
+
+            case "player_is_spectating":
+                return toString(isSpectating(player, currentGame.orElse(null)));
+
+            case "player_game_name":
+                return currentGame
+                        .filter(game -> game.isParticipant(warrior))
+                        .map(game -> game.getConfig().getName())
+                        .orElse("");
+
+            case "player_kills":
+                return currentGame
+                        .filter(game -> game.isParticipant(warrior))
+                        .map(game -> valueOf(game.getKillsCount().getOrDefault(warrior, 0)))
+                        .orElse("0");
+
+            case "player_deaths":
+                return currentGame
+                        .filter(game -> game.isParticipant(warrior))
+                        .map(game -> game.getCasualties().contains(warrior) ? "1" : "0")
+                        .orElse("0");
+
+            case "player_group_name":
+                return currentGame
+                        .filter(game -> game.isParticipant(warrior))
+                        .map(game -> {
+                            Group group = warrior.getGroup();
+                            return group != null ? group.getName() : "";
+                        })
+                        .orElse("");
+
+            case "player_group_remaining":
+                return currentGame
+                        .filter(game -> game.isParticipant(warrior))
+                        .map(game -> {
+                            Group group = warrior.getGroup();
+                            if (group == null)
+                                return "0";
+                            Integer count = game.getGroupParticipants().get(group);
+                            return valueOf(count != null ? count : 0);
+                        })
+                        .orElse("0");
+
+            case "player_group_kills":
+                return currentGame
+                        .filter(game -> game.isParticipant(warrior))
+                        .map(game -> {
+                            Group group = warrior.getGroup();
+                            if (group == null)
+                                return "0";
+                            int totalKills = 0;
+                            for (Map.Entry<Warrior, Integer> entry : game.getKillsCount().entrySet()) {
+                                Group entryGroup = entry.getKey().getGroup();
+                                if (group.equals(entryGroup)) {
+                                    totalKills += entry.getValue();
+                                }
+                            }
+                            return valueOf(totalKills);
+                        })
+                        .orElse("0");
+
+            case "player_damage_dealt":
+                return currentGame
+                        .filter(game -> game.isParticipant(warrior))
+                        .map(game -> valueOf((int) game.getDamageDealt(warrior)))
+                        .orElse("0");
+
+            case "player_is_in_lobby":
+                return currentGame
+                        .filter(game -> game.isParticipant(warrior))
+                        .map(game -> toString(game.isLobby()))
+                        .orElse(toString(false));
+
+            case "player_is_in_battle":
+                return currentGame
+                        .filter(game -> game.isParticipant(warrior))
+                        .map(game -> toString(game.isBattle() && !game.getCasualties().contains(warrior)))
+                        .orElse(toString(false));
+
+            // ─── Existing per-player placeholders ──────────────────────
             case "group_total_victories":
                 Group group = warrior.getGroup();
                 return group != null ? valueOf(group.getData().getTotalVictories()) : "0";
@@ -189,6 +350,38 @@ public class TBExpansion extends PlaceholderExpansion {
                 return valueOf(warrior.getTotalDeaths());
         }
         return null;
+    }
+
+    /**
+     * Checks if a player is spectating the current game.
+     * A player is spectating if:
+     * 1. They died in the game and are in the watchroom (casualtiesWatching), OR
+     * 2. They are NOT a participant but are physically near the watchroom location.
+     */
+    private boolean isSpectating(@NotNull OfflinePlayer player, @Nullable Game game) {
+        if (game == null) {
+            return false;
+        }
+        Warrior warrior = plugin.getDatabaseManager().getWarrior(player);
+
+        // Case 1: died in game and watching from watchroom
+        if (game.getCasualtiesWatching().contains(warrior)) {
+            return true;
+        }
+
+        // Case 2: non-participant physically in the watchroom area (camarote)
+        if (!game.isParticipant(warrior)) {
+            Player onlinePlayer = player.getPlayer();
+            if (onlinePlayer == null) {
+                return false;
+            }
+            Location watchroom = game.getConfig().getWatchroom();
+            if (watchroom != null && watchroom.getWorld() != null
+                    && watchroom.getWorld().equals(onlinePlayer.getWorld())) {
+                return onlinePlayer.getLocation().distanceSquared(watchroom) <= (WATCHROOM_RADIUS * WATCHROOM_RADIUS);
+            }
+        }
+        return false;
     }
 
     @NotNull

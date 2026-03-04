@@ -416,6 +416,14 @@ public abstract class BaseGame {
         return casualties;
     }
 
+    public Collection<Warrior> getCasualtiesWatching() {
+        return casualtiesWatching;
+    }
+
+    public boolean isBattle() {
+        return battle;
+    }
+
     public abstract @NotNull Collection<Warrior> getCurrentFighters();
 
     public HashMap<Warrior, Integer> getKillsCount() {
