@@ -213,10 +213,7 @@ public class TBExpansion extends PlaceholderExpansion {
                 }).orElse("0");
             }
             case "game_alive_count": {
-                return currentGame.map(game -> {
-                    int alive = game.getParticipants().size() - game.getCasualties().size();
-                    return valueOf(Math.max(0, alive));
-                }).orElse("0");
+                return currentGame.map(game -> valueOf(game.getParticipants().size())).orElse("0");
             }
             case "game_groups_remaining":
                 return currentGame.map(game -> valueOf(game.getGroupParticipants().size())).orElse("0");
@@ -265,25 +262,29 @@ public class TBExpansion extends PlaceholderExpansion {
 
             case "player_game_name":
                 return currentGame
-                        .filter(game -> game.isParticipant(warrior))
+                        .filter(game -> game.isParticipant(warrior) || game.getCasualties().contains(warrior)
+                                || isSpectating(player, game))
                         .map(game -> game.getConfig().getName())
                         .orElse("");
 
             case "player_kills":
                 return currentGame
-                        .filter(game -> game.isParticipant(warrior))
+                        .filter(game -> game.isParticipant(warrior) || game.getCasualties().contains(warrior)
+                                || isSpectating(player, game))
                         .map(game -> valueOf(game.getKillsCount().getOrDefault(warrior, 0)))
                         .orElse("0");
 
             case "player_deaths":
                 return currentGame
-                        .filter(game -> game.isParticipant(warrior))
+                        .filter(game -> game.isParticipant(warrior) || game.getCasualties().contains(warrior)
+                                || isSpectating(player, game))
                         .map(game -> game.getCasualties().contains(warrior) ? "1" : "0")
                         .orElse("0");
 
             case "player_group_name":
                 return currentGame
-                        .filter(game -> game.isParticipant(warrior))
+                        .filter(game -> game.isParticipant(warrior) || game.getCasualties().contains(warrior)
+                                || isSpectating(player, game))
                         .map(game -> {
                             Group group = warrior.getGroup();
                             return group != null ? group.getName() : "";
@@ -292,7 +293,8 @@ public class TBExpansion extends PlaceholderExpansion {
 
             case "player_group_remaining":
                 return currentGame
-                        .filter(game -> game.isParticipant(warrior))
+                        .filter(game -> game.isParticipant(warrior) || game.getCasualties().contains(warrior)
+                                || isSpectating(player, game))
                         .map(game -> {
                             Group group = warrior.getGroup();
                             if (group == null)
@@ -304,7 +306,8 @@ public class TBExpansion extends PlaceholderExpansion {
 
             case "player_group_kills":
                 return currentGame
-                        .filter(game -> game.isParticipant(warrior))
+                        .filter(game -> game.isParticipant(warrior) || game.getCasualties().contains(warrior)
+                                || isSpectating(player, game))
                         .map(game -> {
                             Group group = warrior.getGroup();
                             if (group == null)
@@ -322,20 +325,21 @@ public class TBExpansion extends PlaceholderExpansion {
 
             case "player_damage_dealt":
                 return currentGame
-                        .filter(game -> game.isParticipant(warrior))
+                        .filter(game -> game.isParticipant(warrior) || game.getCasualties().contains(warrior)
+                                || isSpectating(player, game))
                         .map(game -> valueOf((int) game.getDamageDealt(warrior)))
                         .orElse("0");
 
             case "player_is_in_lobby":
                 return currentGame
-                        .filter(game -> game.isParticipant(warrior))
+                        .filter(game -> game.isParticipant(warrior) || game.getCasualties().contains(warrior)
+                                || isSpectating(player, game))
                         .map(game -> toString(game.isLobby()))
                         .orElse(toString(false));
 
             case "player_is_in_battle":
                 return currentGame
-                        .filter(game -> game.isParticipant(warrior))
-                        .map(game -> toString(game.isBattle() && !game.getCasualties().contains(warrior)))
+                        .map(game -> toString(game.isBattle() && game.isParticipant(warrior)))
                         .orElse(toString(false));
 
             // ─── Existing per-player placeholders ──────────────────────

@@ -7,6 +7,7 @@ import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
@@ -30,6 +31,17 @@ public class ItemsProtectionListener extends TBListener {
         me.roinujnosde.titansbattle.BaseGame game = plugin.getBaseGameFrom(event.getPlayer());
         if (game != null && game.isLobby()) {
             event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void on(EntityPickupItemEvent event) {
+        if (event.getEntity() instanceof Player) {
+            Player player = (Player) event.getEntity();
+            me.roinujnosde.titansbattle.BaseGame game = plugin.getBaseGameFrom(player);
+            if (game != null && game.isLobby()) {
+                event.setCancelled(true);
+            }
         }
     }
 

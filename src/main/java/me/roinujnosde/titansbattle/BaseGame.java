@@ -129,6 +129,8 @@ public abstract class BaseGame {
             worldBorder.setDamageAmount(getConfig().getBorderDamage());
             worldBorder.setDamageBuffer(0);
         }
+
+        clearArenaItems();
     }
 
     public void finish(boolean cancelled) {
@@ -142,6 +144,7 @@ public abstract class BaseGame {
             loc.getBlock().setType(org.bukkit.Material.AIR);
         }
         placedBlocks.clear();
+        clearArenaItems();
         // Control holograms for npcs
         Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh off glad_iniciando");
         Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "dh off iniciangoagora");
@@ -801,6 +804,26 @@ public abstract class BaseGame {
         addTask(new PreparationTimeTask().runTaskLater(plugin, getConfig().getPreparationTime() * 20));
         addTask(new CountdownTitleTask(getCurrentFighters(), getConfig().getPreparationTime()).runTaskTimer(plugin, 0L,
                 20L));
+    }
+
+    protected void clearArenaItems() {
+        World world = null;
+        if (getConfig().getBorderCenter() != null) {
+            world = getConfig().getBorderCenter().getWorld();
+        } else if (getConfig().getLobby() != null) {
+            world = getConfig().getLobby().getWorld();
+        }
+
+        if (world != null) {
+            for (Entity entity : world.getEntitiesByClass(org.bukkit.entity.Item.class)) {
+                entity.remove();
+            }
+            if (plugin.getConfig().getBoolean("clear_projectiles_on_end", true)) {
+                for (Entity entity : world.getEntitiesByClass(org.bukkit.entity.Projectile.class)) {
+                    entity.remove();
+                }
+            }
+        }
     }
 
     public class LobbyAnnouncementTask extends BukkitRunnable {
